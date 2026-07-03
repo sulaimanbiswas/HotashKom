@@ -32,7 +32,7 @@
         "laravel/tinker": "^2.11",
         "livewire/livewire": "^3.7.3",
         "loilo/fuse": "^7.1.1",
-        "maatwebsite/excel": "4.x-dev",
+        "maatwebsite/excel": "^3.1",
         "meilisearch/meilisearch-php": "^1.16.1",
         "ralphjsmit/laravel-seo": "^1.7.2",
         "spatie/laravel-activitylog": "^4.10.2",
@@ -92,7 +92,7 @@
         ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
-            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1\" \"php artisan pail --timeout=0\" \"npm run dev\" --names=server,queue,logs,vite"
+            "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1\" \"npm run dev\" --names=server,queue,logs,vite"
         ]
     },
     "extra": {
