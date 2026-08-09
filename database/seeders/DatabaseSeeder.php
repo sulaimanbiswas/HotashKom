@@ -2,8 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
-// use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
@@ -13,11 +11,26 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        $this->call([
+            // 1. Independent & Base Tables First
+            ImageSeeder::class,
+            AdminSeeder::class,
+            UserSeeder::class,
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+            // 2. Tables dependent on Images
+            BrandSeeder::class,
+            CategorySeeder::class,
+
+            // 3. Product ecosystem
+            AttributeSeeder::class,
+            ProductSeeder::class,
+
+            // 4. Standalone settings/features
+            CouponSeeder::class,
+            SlideSeeder::class,
+
+            // 5. Dependent on Users, Admins, and Products
+            OrderSeeder::class,
         ]);
     }
 }

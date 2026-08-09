@@ -68,14 +68,16 @@ class LoginController extends Controller
         if ($phone = $request->get('login')) {
             $phone = Str::replace(['-', ' '], '', $phone);
             if (Str::startsWith($phone, '01')) {
-                $phone = '+88'.$phone;
+                $phone = '+88' . $phone;
             }
             $request->merge(['login' => $phone]);
             // If the class is using the ThrottlesLogins trait, we can automatically throttle
             // the login attempts for this application. We'll key this by the login field and
             // the IP address of the client making these requests into this application.
-            if (method_exists($this, 'hasTooManyLoginAttempts') &&
-                $this->hasTooManyLoginAttempts($request)) {
+            if (
+                method_exists($this, 'hasTooManyLoginAttempts') &&
+                $this->hasTooManyLoginAttempts($request)
+            ) {
                 $this->fireLockoutEvent($request);
 
                 return $this->sendLockoutResponse($request);
@@ -98,9 +100,9 @@ class LoginController extends Controller
                 ->with('token:sent', 'An OTP has been sent to your mobile.');
         }
 
-        if (! isOninda()) {
-            return redirect('/');
-        }
+        // if (! isOninda()) {
+        //     return redirect('/');
+        // }
 
         return view('user.auth.login');
     }
@@ -109,7 +111,7 @@ class LoginController extends Controller
     {
         $phone = Str::replace(['-', ' '], '', $request->phone);
         if (Str::startsWith($phone, '01')) {
-            $phone = '+88'.$phone;
+            $phone = '+88' . $phone;
         }
         $request->merge(['phone' => $phone]);
 
@@ -123,7 +125,7 @@ class LoginController extends Controller
     private function getUser($phone)
     {
         \request()->merge([
-            'login' => Str::startsWith($phone, '0') ? '+88'.$phone : $phone,
+            'login' => Str::startsWith($phone, '0') ? '+88' . $phone : $phone,
         ]);
         \request()->validate([
             'login' => ['required', 'regex:/^\+8801\d{9}$/'],
@@ -137,11 +139,11 @@ class LoginController extends Controller
      */
     private function sendOTP(&$user): void
     {
-        throw_if(cacheMemo()->get($key = 'auth:'.\request()->get('login')), ValidationException::withMessages([
+        throw_if(cacheMemo()->get($key = 'auth:' . \request()->get('login')), ValidationException::withMessages([
             'password' => ['Please wait for OTP.'],
         ]));
         $ttl = (property_exists($this, 'decayMinutes') ? $this->decayMinutes : 2) * 60;
-        $otp = cacheMemo()->remember($key, $ttl, fn (): int => mt_rand(1000, 999999));
+        $otp = cacheMemo()->remember($key, $ttl, fn(): int => mt_rand(1000, 999999));
         $user->notify(new SendOTP($otp));
     }
 
@@ -171,12 +173,13 @@ class LoginController extends Controller
     {
         $phone = Str::replace(['-', ' '], '', $request->login);
         if (Str::startsWith($phone, '01')) {
-            $phone = '+88'.$phone;
+            $phone = '+88' . $phone;
         }
         $request->merge(['login' => $phone, 'phone_number' => $phone]);
 
         return $this->guard()->attempt(
-            $this->credentials($request), $request->filled('remember')
+            $this->credentials($request),
+            $request->filled('remember')
         );
     }
 

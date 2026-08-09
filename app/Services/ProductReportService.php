@@ -50,23 +50,34 @@ final readonly class ProductReportService
                 return $products;
             })
             ->groupBy('name') // Group by name instead of id to avoid duplicates
-            ->mapWithKeys(fn ($item, $name): array => [$name => [
+            ->mapWithKeys(fn($item, $name): array => [$name => [
                 'name' => $name,
                 'slug' => $item->first()['slug'] ?? '',
                 'quantity' => (int) $item->sum('quantity'),
                 'total' => (float) $item->sum(function ($product) {
+                    $qty = $product['quantity'] ?? 1;
+                    $price = $product['price'] ?? 0;
+
+                    $fallbackTotal = $product['total'] ?? ($price * $qty);
+
                     // Use retail amounts when retail pricing is enabled
                     if (isOninda() && ! config('app.resell')) {
                         // Fallback: if retail_price is not available, use wholesale total
-                        return (isset($product['retail_price']) && $product['retail_price']) ?
-                            $product['retail_price'] * $product['quantity'] :
-                            $product['total'];
+                        return !empty($product['retail_price']) ?
+                            $product['retail_price'] * $qty :
+                            $fallbackTotal;
                     }
 
                     // Otherwise use wholesale amounts (original behavior)
-                    return $product['total'];
+                    return $fallbackTotal;
                 }),
-                'purchase_cost' => (float) $item->sum(fn ($product): int|float => ((isset($product['purchase_price']) && $product['purchase_price']) ? $product['purchase_price'] : $product['price']) * $product['quantity']),
+                'purchase_cost' => (float) $item->sum(function ($product) {
+                    $qty = $product['quantity'] ?? 1;
+                    $price = $product['price'] ?? 0;
+                    $purchasePrice = !empty($product['purchase_price']) ? $product['purchase_price'] : $price;
+
+                    return $purchasePrice * $qty;
+                }),
             ]])
             ->sortByDesc('quantity')
             ->all();
