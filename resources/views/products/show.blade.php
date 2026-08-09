@@ -235,7 +235,7 @@
             <div id="accordion" class="mt-3">
                 <div class="card">
                     <div class="p-0 card-header">
-                        <a class="px-4 card-link" datatoggle="collapse" href="javascript:void(false)">
+                        <a class="px-4 card-link" data-toggle="collapse" href="javascript:void(false)">
                             Product Description
                         </a>
                     </div>
@@ -271,9 +271,7 @@
                     </div>
                     <div id="collapseTwo" class="collapse show" data-parent="#accordion">
                         <div class="p-2 card-body">
-                            {!! setting('show_option')->productwise_delivery_charge ?? false
-                                ? $product->delivery_text ?? setting('delivery_text')
-                                : setting('delivery_text') !!}
+                            {!! !empty($product->delivery_text) ? $product->delivery_text : setting('delivery_text') !!}
                         </div>
                     </div>
                 </div>
