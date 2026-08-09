@@ -18,91 +18,105 @@
 @endpush
 
 @push('head')
-  {{-- Preconnect to unpkg.com for AOS.js to reduce latency --}}
-  <link rel="preconnect" href="https://unpkg.com" crossorigin>
-  <link rel="dns-prefetch" href="https://unpkg.com">
+    {{-- Preconnect to unpkg.com for AOS.js to reduce latency --}}
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <link rel="dns-prefetch" href="https://unpkg.com">
 @endpush
 
 @push('styles')
-  {{-- Defer AOS CSS to prevent render blocking - load asynchronously --}}
-  <link rel="preload" href="https://unpkg.com/aos@next/dist/aos.css" as="style" onload="this.onload=null;this.rel='stylesheet'">
-  <noscript><link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css"></noscript>
-  <style>
-    .content-accordion .card {
-      border: 1px solid #e3e3e3;
-      margin-bottom: 1rem;
-      border-radius: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .content-accordion .card-header {
-      background-color: #ffffff;
-      border-bottom: 1px solid #e3e3e3;
-      padding: 1rem 1.5rem;
-      border-radius: 8px 8px 0 0;
-    }
-    .content-accordion .btn-link {
-      color: #333;
-      text-decoration: none;
-      font-weight: 600;
-      font-size: 1.1rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      width: 100%;
-      text-align: left;
-      padding: 0;
-      background: none;
-      border: none;
-    }
-    .content-accordion .btn-link:hover {
-      color: #007bff;
-      text-decoration: none;
-    }
-    .content-accordion .btn-link:focus {
-      box-shadow: none;
-      outline: none;
-    }
-    .content-accordion .btn-link::after {
-      content: '−';
-      font-size: 1.5rem;
-      font-weight: bold;
-      color: #666;
-    }
-    .content-accordion .btn-link.collapsed::after {
-      content: '+';
-    }
-    .content-accordion .card-body {
-      padding: 1.5rem;
-      line-height: 1.6;
-      color: #555;
-      font-size: 0.95rem;
-    }
-    .content-accordion .collapse.show {
-      display: block;
-    }
-    .content-accordion .card-body h1,
-    .content-accordion .card-body h2,
-    .content-accordion .card-body h3,
-    .content-accordion .card-body h4,
-    .content-accordion .card-body h5,
-    .content-accordion .card-body h6 {
-      color: #333;
-      margin-bottom: 1rem;
-      font-weight: 600;
-    }
-    .content-accordion .card-body p {
-      margin-bottom: 1rem;
-    }
-    .content-accordion .card-body ul,
-    .content-accordion .card-body ol {
-      margin-bottom: 1rem;
-      padding-left: 1.5rem;
-    }
-    .content-accordion .card-body li {
-      margin-bottom: 0.5rem;
-    }
+    {{-- Defer AOS CSS to prevent render blocking - load asynchronously --}}
+    <link rel="preload" href="https://unpkg.com/aos@next/dist/aos.css" as="style"
+        onload="this.onload=null;this.rel='stylesheet'">
+    <noscript>
+        <link rel="stylesheet" href="https://unpkg.com/aos@next/dist/aos.css">
+    </noscript>
+    <style>
+        .content-accordion .card {
+            border: 1px solid #e3e3e3;
+            margin-bottom: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
 
-  </style>
+        .content-accordion .card-header {
+            background-color: #ffffff;
+            border-bottom: 1px solid #e3e3e3;
+            padding: 1rem 1.5rem;
+            border-radius: 8px 8px 0 0;
+        }
+
+        .content-accordion .btn-link {
+            color: #333;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+            text-align: left;
+            padding: 0;
+            background: none;
+            border: none;
+        }
+
+        .content-accordion .btn-link:hover {
+            color: #007bff;
+            text-decoration: none;
+        }
+
+        .content-accordion .btn-link:focus {
+            box-shadow: none;
+            outline: none;
+        }
+
+        .content-accordion .btn-link::after {
+            content: '−';
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #666;
+        }
+
+        .content-accordion .btn-link.collapsed::after {
+            content: '+';
+        }
+
+        .content-accordion .card-body {
+            padding: 1.5rem;
+            line-height: 1.6;
+            color: #555;
+            font-size: 0.95rem;
+        }
+
+        .content-accordion .collapse.show {
+            display: block;
+        }
+
+        .content-accordion .card-body h1,
+        .content-accordion .card-body h2,
+        .content-accordion .card-body h3,
+        .content-accordion .card-body h4,
+        .content-accordion .card-body h5,
+        .content-accordion .card-body h6 {
+            color: #333;
+            margin-bottom: 1rem;
+            font-weight: 600;
+        }
+
+        .content-accordion .card-body p {
+            margin-bottom: 1rem;
+        }
+
+        .content-accordion .card-body ul,
+        .content-accordion .card-body ol {
+            margin-bottom: 1rem;
+            padding-left: 1.5rem;
+        }
+
+        .content-accordion .card-body li {
+            margin-bottom: 0.5rem;
+        }
+    </style>
 @endpush
 
 @section('content')
@@ -110,160 +124,179 @@
 @include('partials.slides')
 
 @if(isOninda() && config('app.resell') && auth('user')->guest())
-@include('partials.auth-forms')
+    @include('partials.auth-forms')
 @endif
 
 <!-- .block-features -->
 @if(($services = setting('services'))->enabled ?? false)
-@php
-    $serviceIcons = config('services.service_icons', []);
-@endphp
-<div class="block block-features block-features--layout--classic d-none d-md-block">
-    <div class="container">
-        <div class="block-features__list">
-            @foreach(config('services.services', []) as $num => $icon)
-                <div class="block-features__item">
-                    <div class="block-features__icon">
-                        {!! str_replace('<svg ', '<svg width="48px" height="48px" ', $serviceIcons[$num] ?? '') !!}
+    @php
+        $serviceIcons = config('services.service_icons', []);
+    @endphp
+    <div class="block block-features block-features--layout--classic d-none d-md-block">
+        <div class="container">
+            <div class="block-features__list">
+                @foreach(config('services.services', []) as $num => $icon)
+                    <div class="block-features__item align-items-center">
+                        <div class="block-features__icon">
+                            {!! str_replace('<svg ', '<svg width="48px" height="48px" ', $serviceIcons[$num] ?? '') !!}
+                        </div>
+                        <div class="block-features__content">
+                            <div class="block-features__title">{{ $services->$num->title }}</div>
+                            <div class="block-features__subtitle">{{ $services->$num->detail }}</div>
+                        </div>
                     </div>
-                    <div class="block-features__content">
-                        <div class="block-features__title">{{ $services->$num->title }}</div>
-                        <div class="block-features__subtitle">{{ $services->$num->detail }}</div>
-                    </div>
-                </div>
-                @if(!$loop->last)
-                    <div class="block-features__divider"></div>
-                @endif
-            @endforeach
+                    @if(!$loop->last)
+                        <div class="block-features__divider"></div>
+                    @endif
+                @endforeach
+            </div>
         </div>
-    </div>
-</div><!-- .block-features / end -->
+    </div><!-- .block-features / end -->
 @endif
 @if(isOninda())
-<div class="block">
-    <div class="container">
-        <x-reseller-verification-alert />
+    <div class="block">
+        <div class="container">
+            <x-reseller-verification-alert />
+        </div>
     </div>
-</div>
 @endif
 
 <!-- Home Page Heading (e.g: Trusted Online Shopping in Bangladesh) -->
 @if (!empty($company->home_heading))
     <div class="block my-4">
         <div class="container">
-            <h1 class="text-center home-page-heading" style="font-size: 2rem; font-weight: 700; color: #3d464d; margin: 1.5rem 0;">{{ $company->home_heading }}</h1>
+            <h1 class="text-center home-page-heading"
+                style="font-size: 2rem; font-weight: 700; color: #3d464d; margin: 1.5rem 0;">{{ $company->home_heading }}
+            </h1>
         </div>
     </div>
 @endif
 
 @if(($show_option = setting('show_option'))->brand_carousel ?? false)
-<div class="block block-products-carousel" data-layout="grid-cat">
-    <div class="container">
-        <div class="block-header">
-            <h3 class="block-header__title" style="padding: 0.375rem 1rem;">
-                <a href="{{ route('brands') }}" wire:navigate.hover>Brands</a>
-            </h3>
-            <div class="block-header__divider"></div>
-            <div class="block-header__arrows-list">
-                <button class="block-header__arrow block-header__arrow--left" type="button" aria-label="Previous">
-                    <svg width="7px" height="11px" viewBox="0 0 7 11"><path d="M6.7.3c-.4-.4-.9-.4-1.3 0L0 5.5l5.4 5.2c.4.4.9.3 1.3 0 .4-.4.4-1 0-1.3l-4-3.9 4-3.9c.4-.4.4-1 0-1.3z"/></svg>
-                </button>
-                <button class="block-header__arrow block-header__arrow--right" type="button" aria-label="Next">
-                    <svg width="7px" height="11px" viewBox="0 0 7 11"><path d="M.3 10.7c.4.4.9.4 1.3 0L7 5.5 1.6.3C1.2-.1.7 0 .3.3c-.4.4-.4 1 0 1.3l4 3.9-4 3.9c-.4.4-.4 1 0 1.3z"/></svg>
-                </button>
+    <div class="block block-products-carousel" data-layout="grid-cat">
+        <div class="container">
+            <div class="block-header">
+                <h3 class="block-header__title" style="padding: 0.375rem 1rem;">
+                    <a href="{{ route('brands') }}" wire:navigate.hover>Brands</a>
+                </h3>
+                <div class="block-header__divider"></div>
+                <div class="block-header__arrows-list">
+                    <button class="block-header__arrow block-header__arrow--left" type="button" aria-label="Previous">
+                        <svg width="7px" height="11px" viewBox="0 0 7 11">
+                            <path
+                                d="M6.7.3c-.4-.4-.9-.4-1.3 0L0 5.5l5.4 5.2c.4.4.9.3 1.3 0 .4-.4.4-1 0-1.3l-4-3.9 4-3.9c.4-.4.4-1 0-1.3z" />
+                        </svg>
+                    </button>
+                    <button class="block-header__arrow block-header__arrow--right" type="button" aria-label="Next">
+                        <svg width="7px" height="11px" viewBox="0 0 7 11">
+                            <path
+                                d="M.3 10.7c.4.4.9.4 1.3 0L7 5.5 1.6.3C1.2-.1.7 0 .3.3c-.4.4-.4 1 0 1.3l4 3.9-4 3.9c-.4.4-.4 1 0 1.3z" />
+                        </svg>
+                    </button>
+                </div>
             </div>
-        </div>
-        <div class="block-products-carousel__slider">
-            <div class="block-products-carousel__preloader"></div>
-            <div class="owl-carousel">
-                @foreach(brands()->chunk(1) as $brands)
-                <div>
-                    @foreach($brands as $brand)
-                    <div class="products-list__item">
-                        <div class="product-card">
-                            <div class="product-card__image">
-                                <a href="{{ route('brands.products', $brand) }}" wire:navigate.hover>
-                                    <img src="{{ cdn($brand->image_src, 100, 100) }}" alt="Product Image">
-                                </a>
-                            </div>
-                            <div class="product-card__info">
-                                <div class="product-card__name">
-                                    <h4 style="overflow: hidden;text-overflow:ellipsis; font-size: 16px; font-weight: 700;">
-                                        <a href="{{ route('brands.products', $brand) }}" wire:navigate.hover title="{{$brand->name}}">{{ $brand->name }}</a>
-                                    </h4>
+            <div class="block-products-carousel__slider">
+                <div class="block-products-carousel__preloader"></div>
+                <div class="owl-carousel">
+                    @foreach(brands()->chunk(1) as $brands)
+                        <div>
+                            @foreach($brands as $brand)
+                                <div class="products-list__item">
+                                    <div class="product-card">
+                                        <div class="product-card__image">
+                                            <a href="{{ route('brands.products', $brand) }}" wire:navigate.hover>
+                                                <img src="{{ cdn($brand->image_src, 100, 100) }}" alt="Product Image">
+                                            </a>
+                                        </div>
+                                        <div class="product-card__info">
+                                            <div class="product-card__name">
+                                                <h4
+                                                    style="overflow: hidden;text-overflow:ellipsis; font-size: 16px; font-weight: 700;">
+                                                    <a href="{{ route('brands.products', $brand) }}" wire:navigate.hover
+                                                        title="{{$brand->name}}">{{ $brand->name }}</a>
+                                                </h4>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
+                            @endforeach
                         </div>
-                    </div>
                     @endforeach
                 </div>
-                @endforeach
             </div>
         </div>
     </div>
-</div>
 @endif
 
 @if(($show_option = setting('show_option'))->category_carousel ?? false)
-<div class="block block-products-carousel" data-layout="grid-cat">
-    <div class="container">
-        <div class="block-header">
-            <h3 class="block-header__title" style="padding: 0.375rem 1rem;">
-                <a href="{{ route('categories') }}" wire:navigate.hover>Categories</a>
-            </h3>
-            <div class="block-header__divider"></div>
-            <div class="block-header__arrows-list">
-                <button class="block-header__arrow block-header__arrow--left" type="button" aria-label="Previous">
-                    <svg width="7px" height="11px" viewBox="0 0 7 11"><path d="M6.7.3c-.4-.4-.9-.4-1.3 0L0 5.5l5.4 5.2c.4.4.9.3 1.3 0 .4-.4.4-1 0-1.3l-4-3.9 4-3.9c.4-.4.4-1 0-1.3z"/></svg>
-                </button>
-                <button class="block-header__arrow block-header__arrow--right" type="button" aria-label="Next">
-                    <svg width="7px" height="11px" viewBox="0 0 7 11"><path d="M.3 10.7c.4.4.9.4 1.3 0L7 5.5 1.6.3C1.2-.1.7 0 .3.3c-.4.4-.4 1 0 1.3l4 3.9-4 3.9c-.4.4-.4 1 0 1.3z"/></svg>
-                </button>
+    <div class="block block-products-carousel" data-layout="grid-cat">
+        <div class="container">
+            <div class="block-header">
+                <h3 class="block-header__title" style="padding: 0.375rem 1rem;">
+                    <a href="{{ route('categories') }}" wire:navigate.hover>Categories</a>
+                </h3>
+                <div class="block-header__divider"></div>
+                <div class="block-header__arrows-list">
+                    <button class="block-header__arrow block-header__arrow--left" type="button" aria-label="Previous">
+                        <svg width="7px" height="11px" viewBox="0 0 7 11">
+                            <path
+                                d="M6.7.3c-.4-.4-.9-.4-1.3 0L0 5.5l5.4 5.2c.4.4.9.3 1.3 0 .4-.4.4-1 0-1.3l-4-3.9 4-3.9c.4-.4.4-1 0-1.3z" />
+                        </svg>
+                    </button>
+                    <button class="block-header__arrow block-header__arrow--right" type="button" aria-label="Next">
+                        <svg width="7px" height="11px" viewBox="0 0 7 11">
+                            <path
+                                d="M.3 10.7c.4.4.9.4 1.3 0L7 5.5 1.6.3C1.2-.1.7 0 .3.3c-.4.4-.4 1 0 1.3l4 3.9-4 3.9c-.4.4-.4 1 0 1.3z" />
+                        </svg>
+                    </button>
+                </div>
             </div>
-        </div>
-        <div class="block-products-carousel__slider">
-            <div class="block-products-carousel__preloader"></div>
-            <div class="owl-carousel">
-                @foreach(categories()->chunk(1) as $categories)
-                <div>
-                    @foreach($categories as $category)
-                    <div class="products-list__item">
-                        <div class="product-card">
-                            <div class="product-card__image">
-                                <a href="{{ route('categories.products', $category) }}" wire:navigate.hover>
-                                    <img src="{{ cdn($category->image_src, 100, 100) }}" alt="Product Image" loading="lazy" decoding="async">
-                                </a>
-                            </div>
-                            <div class="product-card__info">
-                                <div class="product-card__name">
-                                    <h4 style="overflow: hidden;text-overflow:ellipsis; font-size: 16px; font-weight: 700;">
-                                        <a href="{{ route('categories.products', $category) }}" wire:navigate.hover title="{{$category->name}}">{{ $category->name }}</a>
-                                    </h4>
+            <div class="block-products-carousel__slider">
+                <div class="block-products-carousel__preloader"></div>
+                <div class="owl-carousel">
+                    @foreach(categories()->chunk(1) as $categories)
+                        <div>
+                            @foreach($categories as $category)
+                                <div class="products-list__item">
+                                    <div class="product-card">
+                                        <div class="product-card__image">
+                                            <a href="{{ route('categories.products', $category) }}" wire:navigate.hover>
+                                                <img src="{{ cdn($category->image_src, 100, 100) }}" alt="Product Image"
+                                                    loading="lazy" decoding="async">
+                                            </a>
+                                        </div>
+                                        <div class="product-card__info">
+                                            <div class="product-card__name">
+                                                <h4
+                                                    style="overflow: hidden;text-overflow:ellipsis; font-size: 16px; font-weight: 700;">
+                                                    <a href="{{ route('categories.products', $category) }}" wire:navigate.hover
+                                                        title="{{$category->name}}">{{ $category->name }}</a>
+                                                </h4>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
+                            @endforeach
                         </div>
-                    </div>
                     @endforeach
                 </div>
-                @endforeach
             </div>
         </div>
     </div>
-</div>
 @endif
 
 @foreach(sections() as $section)
 @if($section->type == 'pure-grid')
     <!-- .block-products-carousel -->
     @if(config('app.infinite_scroll_section', false))
-    <x-infinite-scroll-section :section="$section" />
+        <x-infinite-scroll-section :section="$section" />
     @else
-    @include('partials.products.pure-grid', [
-        'title' => $section->title,
-        'products' => $section->products(),
-        'cols' => optional($section->data)->cols ?? 5,
-        'section' => $section,
-    ])
+        @include('partials.products.pure-grid', [
+            'title' => $section->title,
+            'products' => $section->products(),
+            'cols' => optional($section->data)->cols ?? 5,
+            'section' => $section,
+        ])
     @endif
 @else
     <!-- .block-products-carousel -->
@@ -275,43 +308,43 @@
     ])
 @endif
 @if ($section->type == 'banner')
-    @php($pseudoColumns = (array)$section->data->columns)
-    <div class="block block-banner">
-        <div class="container-fluid">
-            <div class="row">
-                @foreach($pseudoColumns['width'] as $i => $width)
-                <div class="col-md-{{$width}} mb-3">
-                    @php($link = $pseudoColumns['link'][$i])
-                    @php($link = $link && $link != '#' ? $link : null)
-                    @php($link = $link ? url($link) : null)
-                    @php($categories = implode(',', ((array)($pseudoColumns['categories'] ?? []))[$i] ?? []))
-                    <a href="{{ $link ?? route('products.index', $categories ? ['filter_category' => $categories] : []) }}" @if(! $link) wire:navigate.hover @endif>
-                        <img
-                            data-aos="{{$pseudoColumns['animation'][$i]}}"
-                            class="border img-fluid w-100"
-                            src="{{ cdn($pseudoColumns['image'][$i]) }}"
-                            alt="Image"
-                        >
-                    </a>
-                </div>
-                @endforeach
+@php($pseudoColumns = (array) $section->data->columns)
+<div class="block block-banner">
+    <div class="container-fluid">
+        <div class="row">
+            @foreach($pseudoColumns['width'] as $i => $width)
+            <div class="col-md-{{$width}} mb-3">
+                @php($link = $pseudoColumns['link'][$i])
+                @php($link = $link && $link != '#' ? $link : null)
+                @php($link = $link ? url($link) : null)
+                @php($categories = implode(',', ((array) ($pseudoColumns['categories'] ?? []))[$i] ?? []))
+                <a href="{{ $link ?? route('products.index', $categories ? ['filter_category' => $categories] : []) }}"
+                    @if(!$link) wire:navigate.hover @endif>
+                    <img data-aos="{{$pseudoColumns['animation'][$i]}}" class="border img-fluid w-100"
+                        src="{{ cdn($pseudoColumns['image'][$i]) }}" alt="Image">
+                </a>
             </div>
+            @endforeach
         </div>
     </div>
+</div>
 @endif
 @if ($section->type == 'content')
-    @php($page = \App\Models\Page::find($section->data->page_id ?? null))
-    @if($page)
+@php($page = \App\Models\Page::find($section->data->page_id ?? null))
+@if($page)
     <div class="block">
         <div class="container">
             <div class="accordion content-accordion" id="content-accordion-{{ $section->id }}">
                 <div class="card">
                     <div class="card-header" id="heading-{{ $section->id }}">
-                        <button class="btn btn-link" type="button" data-toggle="collapse" data-target="#collapse-{{ $section->id }}" aria-expanded="true" aria-controls="collapse-{{ $section->id }}">
+                        <button class="btn btn-link" type="button" data-toggle="collapse"
+                            data-target="#collapse-{{ $section->id }}" aria-expanded="true"
+                            aria-controls="collapse-{{ $section->id }}">
                             {{ $page->title }}
                         </button>
                     </div>
-                    <div id="collapse-{{ $section->id }}" class="collapse show" aria-labelledby="heading-{{ $section->id }}" data-parent="#content-accordion-{{ $section->id }}">
+                    <div id="collapse-{{ $section->id }}" class="collapse show" aria-labelledby="heading-{{ $section->id }}"
+                        data-parent="#content-accordion-{{ $section->id }}">
                         <div class="card-body">
                             {!! $page->content !!}
                         </div>
@@ -320,7 +353,7 @@
             </div>
         </div>
     </div>
-    @endif
+@endif
 @endif
 <!-- .block-products-carousel / end -->
 @endforeach
@@ -328,34 +361,34 @@
 @endsection
 
 @push('scripts')
-  {{-- Defer AOS.js - it's only for animations, not critical for initial render --}}
-  <script src="https://unpkg.com/aos@next/dist/aos.js" defer></script>
-  <script defer>
-    // Wait for AOS to load before initializing
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', function() {
-        if (typeof AOS !== 'undefined') {
-          AOS.init();
+    {{-- Defer AOS.js - it's only for animations, not critical for initial render --}}
+    <script src="https://unpkg.com/aos@next/dist/aos.js" defer></script>
+    <script defer>
+        // Wait for AOS to load before initializing
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function () {
+                if (typeof AOS !== 'undefined') {
+                    AOS.init();
+                } else {
+                    // Fallback: wait for script to load
+                    window.addEventListener('load', function () {
+                        if (typeof AOS !== 'undefined') {
+                            AOS.init();
+                        }
+                    });
+                }
+            });
         } else {
-          // Fallback: wait for script to load
-          window.addEventListener('load', function() {
+            // DOM already loaded
             if (typeof AOS !== 'undefined') {
-              AOS.init();
+                AOS.init();
+            } else {
+                window.addEventListener('load', function () {
+                    if (typeof AOS !== 'undefined') {
+                        AOS.init();
+                    }
+                });
             }
-          });
         }
-      });
-    } else {
-      // DOM already loaded
-      if (typeof AOS !== 'undefined') {
-        AOS.init();
-      } else {
-        window.addEventListener('load', function() {
-          if (typeof AOS !== 'undefined') {
-            AOS.init();
-          }
-        });
-      }
-    }
-  </script>
+    </script>
 @endpush
