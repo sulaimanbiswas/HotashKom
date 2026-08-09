@@ -6,8 +6,12 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="format-detection" content="telephone=no">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ $company->name ?? '' }} - @yield('title')</title>
-    <link rel="shortcut icon" href="{{ asset($logo->favicon ?? '') }}" type="image/x-icon">
+    @if (trim($__env->yieldContent('seo_tags')))
+        @yield('seo_tags')
+    @else
+        <title>{{ $company->name }} - @yield('title')</title>
+    @endif
+    <link rel="icon" type="image/png" href="{{ asset($logo->favicon) }}">
 
     @php
         $bootstrapCss = cdnAsset('bootstrap.css', 'strokya/vendor/bootstrap-4.2.1/css/bootstrap.min.css');
@@ -41,9 +45,9 @@
     {{-- Polyfill for async CSS loading (preload with onload) --}}
     <script data-navigate-once>
         /*! loadCSS. [c]2017 Filament Group, Inc. MIT License */
-        (function(w) {
+        (function (w) {
             "use strict";
-            var loadCSS = function(href, before, media) {
+            var loadCSS = function (href, before, media) {
                 var doc = w.document;
                 var ss = doc.createElement("link");
                 var ref;
@@ -62,14 +66,14 @@
                     if (doc.body) {
                         return cb();
                     }
-                    setTimeout(function() {
+                    setTimeout(function () {
                         ready(cb);
                     });
                 }
-                ready(function() {
+                ready(function () {
                     ref.parentNode.insertBefore(ss, (before ? ref : ref.nextSibling));
                 });
-                var onloadcssdefined = function(cb) {
+                var onloadcssdefined = function (cb) {
                     var resolvedHref = ss.href;
                     var i = sheets.length;
                     while (i--) {
@@ -77,12 +81,12 @@
                             return cb();
                         }
                     }
-                    setTimeout(function() {
+                    setTimeout(function () {
                         onloadcssdefined(cb);
                     });
                 };
                 ss.onloadcssdefined = onloadcssdefined;
-                onloadcssdefined(function() {
+                onloadcssdefined(function () {
                     ss.media = media || "all";
                 });
                 return ss;
@@ -95,10 +99,10 @@
         }(typeof global !== "undefined" ? global : this));
 
         // Polyfill for browsers that don't support preload with onload
-        (function() {
+        (function () {
             function processPreloadLinks() {
                 var preloadLinks = document.querySelectorAll('link[rel="preload"][as="style"]');
-                preloadLinks.forEach(function(link) {
+                preloadLinks.forEach(function (link) {
                     // If onload handler wasn't set or doesn't work, provide fallback
                     if (!link.hasAttribute('data-async-processed')) {
                         link.setAttribute('data-async-processed', 'true');
@@ -106,7 +110,7 @@
                         var originalOnload = link.onload;
 
                         // Enhanced onload handler
-                        link.onload = function() {
+                        link.onload = function () {
                             if (originalOnload) {
                                 try {
                                     originalOnload.call(this);
@@ -119,7 +123,7 @@
                         };
 
                         // Fallback: if onload doesn't fire within 3 seconds, load synchronously
-                        setTimeout(function() {
+                        setTimeout(function () {
                             if (link && link.rel === 'preload') {
                                 if (typeof loadCSS !== 'undefined') {
                                     loadCSS(href);
@@ -145,7 +149,7 @@
     <script src="{{ $jqueryJs }}" data-navigate-once crossorigin="anonymous" referrerpolicy="no-referrer"
         onerror="window.__loadLocalAsset && window.__loadLocalAsset('jquery')"></script>
     <script data-navigate-once>
-        (function() {
+        (function () {
             if (window.runWhenJQueryReady) {
                 window.__flushRunWhenJQueryQueue && window.__flushRunWhenJQueryQueue();
                 return;
@@ -174,7 +178,7 @@
 
             window.__flushRunWhenJQueryQueue = flushQueue;
 
-            window.runWhenJQueryReady = function(callback) {
+            window.runWhenJQueryReady = function (callback) {
                 if (typeof window.jQuery !== 'undefined') {
                     callback(window.jQuery);
                 } else {
@@ -217,8 +221,6 @@
         @endphp
     @endif
 
-    {{-- Load Meta Pixel immediately (not deferred) so Facebook can detect it during setup --}}
-    {{-- Use data-navigate-once so it doesn't reload during SPA navigation --}}
     <x-metapixel-head />
     @include('layouts.yellow.css')
     <!-- js -->
@@ -593,6 +595,7 @@
         .widget-connect__button-activator {
             margin: auto;
             border-radius: 50%;
+            background: #ff0000;
             box-shadow: 2px 2px 6px rgba(0, 0, 0, .4);
             background-position: center center;
             background-repeat: no-repeat;
@@ -879,6 +882,25 @@
         @endphp
     @endif
     <x-metapixel-body />
+    {{-- Render any server-flashed dataLayer events (e.g. ViewContent from ProductController) --}}
+    @if(session('datalayer_events'))
+        <script>
+            window.dataLayer = window.dataLayer || [];
+            @foreach(session('datalayer_events') as $dlEvent)
+                window.dataLayer.push({{ Js::from($dlEvent) }});
+            @endforeach
+        </script>
+    @endif
+    {{-- Expose tracking config and CSRF token to JavaScript --}}
+    <script data-navigate-once>
+        window._csrfToken = '{{ csrf_token() }}';
+        window.trackingConfig = {
+            pixelIds: {{ Js::from(app(App\Services\FacebookPixelService::class)->getPixelIds()) }},
+            pixelEnabled: {{ (setting('meta_pixel') || config('meta-pixel.meta_pixel') || setting('pixel_ids')) ? 'true' : 'false' }},
+            advancedTracking: {{ config('meta-pixel.advanced_tracking') ? 'true' : 'false' }},
+        };
+        window.dataLayer = window.dataLayer || [];
+    </script>
     <!-- quickview-modal -->
     <div id="quickview-modal" class="modal fade" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-xl">
@@ -892,7 +914,10 @@
             <div class="mobilemenu__header">
                 <div class="mobilemenu__title">Menu</div>
                 <button type="button" class="mobilemenu__close">
-                    <svg width="20px" height="20px" viewBox="0 0 20 20"><path d="M17.71 17.71a.99.99 0 0 1-1.4 0L10 11.4l-6.31 6.31a.99.99 0 1 1-1.4-1.4L8.6 10 2.29 3.69a.99.99 0 1 1 1.4-1.4L10 8.6l6.31-6.31a.99.99 0 1 1 1.4 1.4L11.4 10l6.31 6.31a.99.99 0 0 1 0 1.4z"/></svg>
+                    <svg width="20px" height="20px" viewBox="0 0 20 20">
+                        <path
+                            d="M17.71 17.71a.99.99 0 0 1-1.4 0L10 11.4l-6.31 6.31a.99.99 0 1 1-1.4-1.4L8.6 10 2.29 3.69a.99.99 0 1 1 1.4-1.4L10 8.6l6.31-6.31a.99.99 0 1 1 1.4 1.4L11.4 10l6.31 6.31a.99.99 0 0 1 0 1.4z" />
+                    </svg>
                 </button>
             </div>
             <div class="mobilemenu__content">
@@ -926,7 +951,7 @@
         </div>
         <!-- site__body / end -->
         <!-- site__footer -->
-        @include('partials.footer')
+        @include(config('app.footer_view') ?? 'partials.footer-default')
         <!-- site__footer / end -->
     </div><!-- site / end -->
     @livewireScripts
@@ -940,7 +965,7 @@
     <script src="{{ versionedAsset('strokya/js/product-gallery.js') }}" defer></script>
     <script src="{{ versionedAsset('strokya/js/storefront-components.js') }}" defer></script>
     <script src="{{ versionedAsset('strokya/js/whatsapp-handlers.js') }}" defer></script>
-    <script src="{{ versionedAsset('strokya/js/facebook-events.js') }}" defer></script>
+    <script src="{{ versionedAsset('strokya/js/facebook-events.js') }}" defer data-navigate-once></script>
     {{-- All JavaScript has been moved to external files for better caching --}}
     {{-- See: strokya/js/product-gallery.js, notify-handler.js, storefront-components.js, etc. --}}
     <style>
@@ -972,13 +997,15 @@
     {{-- Storefront components moved to external file: strokya/js/storefront-components.js --}}
     @stack('scripts')
     @php
-        function phone88($phone)
-        {
-            $phone = preg_replace('/[^\d]/', '', $phone);
-            if (strlen($phone) == 11) {
-                $phone = '88' . $phone;
+        if (!function_exists('phone88')) {
+            function phone88($phone)
+            {
+                $phone = preg_replace('/[^\d]/', '', $phone);
+                if (strlen($phone) == 11) {
+                    $phone = '88' . $phone;
+                }
+                return $phone;
             }
-            return $phone;
         }
         $messenger = $company->messenger ?? '';
         $phone = phone88($company->whatsapp ?? '');
@@ -987,33 +1014,32 @@
         <div class="widget-connect widget-connect-right">
             @if ($messenger)
                 <a class="widget-connect__button widget-connect__button-telemessenger button-slide-out"
-                    style="background: white; color: blue;" href="{{ $messenger }}" data-toggle="tooltip"
-                    data-placement="left" title="" target="_blank" data-original-title="Messenger">
+                    aria-label="Messenger Link" style="background: white; color: blue;" href="{{ $messenger }}"
+                    data-toggle="tooltip" data-placement="left" title="" target="_blank" data-original-title="Messenger"
+                    data-contact-type="messenger">
                     <i class="fab fa-facebook-messenger"></i>
                 </a>
             @endif
             @if ($phone)
                 <a class="widget-connect__button widget-connect__button-whatsapp button-slide-out"
-                    style="background: white; color: green;" href="https://wa.me/{{ $phone }}"
-                    data-toggle="tooltip" data-placement="left" title="" data-original-title="WhatsApp"
-                    data-whatsapp-url="https://wa.me/{{ $phone }}"
-                    onclick="window.location.href=this.getAttribute('data-whatsapp-url')||this.href;return false;">
+                    style="background: white; color: green;" href="https://wa.me/{{ $phone }}" data-toggle="tooltip"
+                    data-placement="left" title="" data-original-title="WhatsApp" data-whatsapp-url="https://wa.me/{{ $phone }}"
+                    aria-label="Whatsapp Link" data-contact-type="whatsapp">
                     <i class="fab fa-whatsapp"></i>
                 </a>
             @endif
-            <div class="widget-connect__button-activator" style="background-color: #ff0000;">
+            <div class="widget-connect__button-activator">
                 <div class="widget-connect__button-activator-icon"></div>
             </div>
         </div>
     @elseif ($phone)
-        <a href="https://api.whatsapp.com/send?phone={{ $phone }}"
+        <a href="https://api.whatsapp.com/send?phone={{ $phone }}" aria-label="Whatsapp Link"
             style="position:fixed;width:60px;height:60px;bottom:40px;right:40px;background-color:#25d366;color:#FFF;border-radius:50px;text-align:center;font-size:30px;box-shadow: 2px 2px 3px #999;z-index:100;cursor:pointer;"
-            data-whatsapp-url="https://api.whatsapp.com/send?phone={{ $phone }}"
-            onclick="window.location.href=this.getAttribute('data-whatsapp-url')||this.href;return false;">
+            data-whatsapp-url="https://api.whatsapp.com/send?phone={{ $phone }}" data-contact-type="whatsapp">
             <i class="fab fa-whatsapp" style="margin-top: 1rem;"></i>
         </a>
     @elseif (strlen($messenger) > 13)
-        <a href="{{ $messenger }}" target="_blank"
+        <a href="{{ $messenger }}" target="_blank" aria-label="Messenger Link" data-contact-type="messenger"
             style="position:fixed;width:60px;height:60px;bottom:40px;right:40px;background-color:#0084ff;color:#FFF;border-radius:50px;text-align:center;font-size:30px;box-shadow: 2px 2px 3px #999;z-index:100;">
             <i class="fab fa-facebook-messenger" style="margin-top: 1rem;"></i>
         </a>
@@ -1021,7 +1047,7 @@
     {{-- WhatsApp handlers moved to external file: strokya/js/whatsapp-handlers.js --}}
     @if (config('app.unregister_sw'))
         <script data-navigate-once>
-            (async () => {\
+            (async () => {
                 try {
                     // Unregister all service workers
                     if ('serviceWorker' in navigator) {
@@ -1046,6 +1072,44 @@
     @endif
     {{-- Facebook events moved to external file: strokya/js/facebook-events.js --}}
     {{-- xzoom click handler moved to: strokya/js/product-gallery.js --}}
+    {{-- Re-initialize Meta Pixel with latest decrypted user data matching params on every page load & SPA transition
+    --}}
+    <script>
+        (function () {
+            if (typeof fbq === 'function' && window.trackingConfig && window.trackingConfig.pixelIds && window.trackingConfig.pixelIds.length > 0) {
+                var userData = {{ Js::from(app(App\Services\FacebookPixelService::class)->getNormalizedUserData()) }};
+                var hasUserData = userData && (Array.isArray(userData) ? userData.length > 0 : Object.keys(userData).length > 0);
+                var initializedPixels = window.initializedMetaPixels || {};
+
+                function isPixelInitialized(pixelId) {
+                    if (initializedPixels[pixelId]) return true;
+                    if (typeof fbq.instance === 'object' && fbq.instance.pixels && fbq.instance.pixels.hasOwnProperty(pixelId)) return true;
+                    if (Array.isArray(fbq.queue)) {
+                        for (var i = 0; i < fbq.queue.length; i++) {
+                            var item = fbq.queue[i];
+                            if (Array.isArray(item) && item[0] === 'init' && item[1] === pixelId) {
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                }
+
+                window.trackingConfig.pixelIds.forEach(function (pixelId) {
+                    var isInitialized = isPixelInitialized(pixelId);
+                    if (!isInitialized || hasUserData) {
+                        if (hasUserData) {
+                            fbq('init', pixelId, userData);
+                        } else {
+                            fbq('init', pixelId);
+                        }
+                        initializedPixels[pixelId] = true;
+                    }
+                });
+                window.initializedMetaPixels = initializedPixels;
+            }
+        })();
+    </script>
 </body>
 
 </html>

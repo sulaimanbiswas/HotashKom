@@ -40,6 +40,9 @@ class SettingRequest extends FormRequest
                 'company.gmap_ecode' => ['nullable'],
                 'company.dev_name' => ['nullable'],
                 'company.dev_link' => ['nullable'],
+                'company.home_heading' => ['nullable', 'string', 'max:255'],
+                'company.seo_title' => ['nullable', 'string', 'max:255'],
+                'company.meta_description' => ['nullable', 'string', 'max:500'],
                 'call_for_order' => ['required'],
                 'social' => ['required', 'array'],
             ];
@@ -47,11 +50,12 @@ class SettingRequest extends FormRequest
 
         if ($this->get('tab') == 'delivery') {
             return [
-                'delivery_charge.inside_dhaka' => 'sometimes|integer',
-                'delivery_charge.outside_dhaka' => 'sometimes|integer',
+                'delivery_areas' => 'required|array|min:1',
+                'delivery_areas.*.name' => 'required|string|max:255',
+                'delivery_areas.*.cost' => 'required|integer|min:0',
+                'default_delivery_area' => 'required|integer',
                 'delivery_text' => 'sometimes',
                 'free_delivery' => 'sometimes',
-                'default_area' => 'required|array',
                 'show_option' => 'required|array',
             ];
         }
@@ -60,6 +64,7 @@ class SettingRequest extends FormRequest
             return [
                 'gtm_id' => 'sometimes',
                 'pixel_ids' => 'sometimes',
+                'meta_pixel' => 'sometimes',
                 'scripts' => 'sometimes',
             ];
         }

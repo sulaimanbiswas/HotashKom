@@ -6,6 +6,8 @@ use App\Jobs\SyncOrderStatusWithReseller;
 use App\Jobs\SyncProductStockWithResellers;
 use App\Pathao\Facade\Pathao;
 use App\Redx\Facade\Redx;
+use App\Services\DeliveryAreaService;
+use App\Services\FacebookPixelService;
 use Fuse\Fuse;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
@@ -13,8 +15,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
+use Spatie\GoogleTagManager\GoogleTagManagerFacade;
 
 class Order extends Model
 {
@@ -25,7 +29,7 @@ class Order extends Model
     const MANUAL = 1;
 
     protected $fillable = [
-        'admin_id', 'user_id', 'type', 'name', 'phone', 'email', 'address', 'status', 'status_at', 'shipped_at', 'products', 'note', 'data', 'source_id',
+        'admin_id', 'user_id', 'type', 'name', 'phone', 'email', 'address', 'status', 'status_at', 'shipped_at', 'products', 'note', 'data', 'tracking', 'source_id',
     ];
 
     protected $attributes = [
@@ -112,18 +116,109 @@ class Order extends Model
             // Clear EditOrder component caches
             cacheMemo()->forget('order_activities:'.$order->id);
 
+            $status = Arr::get($order->getChanges(), 'status');
+
+            if (config('meta-pixel.advanced_tracking') && $status) {
+                try {
+                    // Fire CAPI + flash GTM dataLayer on order status change
+                    $facebookPixelService = app(FacebookPixelService::class);
+
+                    $facebookProducts = [];
+                    foreach ($order->products as $product) {
+                        $p = (array) $product;
+                        $price = (float) (isOninda() && config('app.resell') ? $p['retail_price'] ?? $p['price'] : $p['price']);
+                        $facebookProducts[] = [
+                            'id' => $p['id'],
+                            'name' => $p['name'],
+                            'price' => $price,
+                            'quantity' => (int) $p['quantity'],
+                        ];
+                    }
+
+                    $retail = 0;
+                    foreach ($facebookProducts as $p) {
+                        $retail = $retail + ($p['price'] * $p['quantity']);
+                    }
+                    $shippingCost = (float) (isOninda() && config('app.resell') ? $order->data['retail_delivery_fee'] ?? ($order->data['shipping_cost'] ?? 0) : $order->data['shipping_cost'] ?? 0);
+                    $discount = (float) (isOninda() && config('app.resell') ? $order->data['retail_discount'] ?? 0 : $order->data['discount'] ?? 0);
+                    $advanced = (float) ($order->data['advanced'] ?? 0);
+                    $couponDiscount = (float) ($order->data['coupon_discount'] ?? 0);
+
+                    $orderTotal = $retail + $shippingCost - $discount - $advanced - $couponDiscount;
+
+                    $orderPayload = [
+                        'id' => $order->id,
+                        'total' => $orderTotal,
+                    ];
+
+                    $tracking = $order->tracking ?: [];
+                    $eventId = 'ord_'.strtolower($status).'_'.$order->id.'_'.time();
+                    $tracking['event_id'] = $eventId;
+
+                    $userData = [
+                        'em' => $order->email ? strtolower($order->email) : null,
+                        'ph' => $order->phone ? preg_replace('/[^\d]/', '', $order->phone) : null,
+                        'fn' => $order->name ? strtolower($order->name) : null,
+                        'client_ip_address' => $tracking['ip'] ?? request()->ip(),
+                        'client_user_agent' => $tracking['ua'] ?? request()->userAgent(),
+                    ];
+
+                    $tracked = false;
+                    $dlEventName = '';
+
+                    if ($status === 'CONFIRMED' && config('meta-pixel.advanced_tracking')) {
+                        $facebookPixelService->trackPurchase($orderPayload, $facebookProducts, $userData, null, $tracking);
+                        $dlEventName = 'Purchase';
+                        $tracked = true;
+                    } elseif ($status === 'DELIVERED') {
+                        $facebookPixelService->trackOrderDelivered($orderPayload, $facebookProducts, $userData, null, $tracking);
+                        $dlEventName = 'OrderDelivered';
+                        $tracked = true;
+                    } elseif ($status === 'CANCELLED') {
+                        $facebookPixelService->trackOrderCancelled($orderPayload, $facebookProducts, $userData, null, $tracking);
+                        $dlEventName = 'OrderCancelled';
+                        $tracked = true;
+                    } elseif ($status === 'RETURNED' || $status === 'PAID_RETURN') {
+                        $facebookPixelService->trackOrderReturned($orderPayload, $facebookProducts, $userData, null, $tracking);
+                        $dlEventName = 'OrderReturned';
+                        $tracked = true;
+                    }
+
+                    if ($tracked && GoogleTagManagerFacade::isEnabled()) {
+                        $dlEvent = [
+                            'event' => 'meta_'.$dlEventName,
+                            'meta_event_name' => $dlEventName,
+                            'meta_event_id' => $eventId,
+                            'ecommerce' => [
+                                'transaction_id' => (string) $order->id,
+                                'value' => $orderTotal,
+                                'currency' => 'BDT',
+                                'items' => array_map(fn ($p) => [
+                                    'item_id' => (string) $p['id'],
+                                    'item_name' => $p['name'],
+                                    'price' => $p['price'],
+                                    'quantity' => $p['quantity'],
+                                ], $facebookProducts),
+                            ],
+                            'customer' => customer_info(),
+                        ];
+                        session()->flash('datalayer_events', array_merge(session('datalayer_events', []), [$dlEvent]));
+                    }
+                } catch (\Exception $e) {
+                    Log::error('Order status tracking error: '.$e->getMessage());
+                }
+            }
+
             if (! isOninda()) {
                 return;
             }
-
-            $status = Arr::get($order->getChanges(), 'status');
 
             // Dispatch job to sync status with resellers
             if ($status) {
                 dispatch(new SyncOrderStatusWithReseller($order->id));
             }
 
-            if (! in_array($status, ['DELIVERED', 'RETURNED'])) {
+            if (! in_array($status, ['DELIVERED', 'RETURNED', 'PAID_RETURN'])) {
                 return;
             }
 
@@ -134,7 +229,7 @@ class Order extends Model
             $retailDiscount = (float) ($order->data['retail_discount'] ?? 0);
             $subtotal = (float) ($order->data['subtotal'] ?? 0);
             $discount = (float) ($order->data['discount'] ?? 0);
-            $packagingCharge = (float) ($order->data['packaging_charge'] ?? 25); // Packaging charge
+            $packagingCharge = (float) ($order->data['packaging_charge'] ?? config('app.packaging_charge', 25)); // Packaging charge
 
             $calculateCommission = (fn (): float =>
                 // Commission = (retail + retail_delivery_fee) - advanced - retail_discount - (subtotal + shipping_cost - discount) - packaging_charge
@@ -252,6 +347,16 @@ class Order extends Model
         return Attribute::make(
             fn ($data): mixed => json_decode((string) $data, true),
             fn ($data) => $this->attributes['data'] = json_encode(array_merge($this->data, $data)),
+        );
+    }
+
+    protected function tracking(): Attribute
+    {
+        return Attribute::make(
+            fn ($tracking): array => $tracking ? json_decode((string) $tracking, true) : [],
+            fn ($tracking) => $this->attributes['tracking'] = json_encode(
+                array_merge($this->tracking ?? [], is_array($tracking) ? $tracking : [])
+            ),
         );
     }
 
@@ -396,59 +501,16 @@ class Order extends Model
             return 0;
         }
 
-        $this->isFreeDelivery = false;
-        $shipping_cost = 0;
-        if ($shipping_area) {
-            if (setting('show_option')->productwise_delivery_charge ?? false) {
-                $shipping_cost = $products->sum(function ($item) use ($shipping_area) {
-                    $item = (array) $item;
-                    $factor = (setting('show_option')->quantitywise_delivery_charge ?? false) ? ($item['quantity'] ?? 1) : 1;
+        $isFree = false;
+        $shippingCost = app(DeliveryAreaService::class)->calculateShippingCost(
+            $shipping_area,
+            $products,
+            $subtotal,
+            $isFree
+        );
+        $this->isFreeDelivery = $isFree;
 
-                    return ($item[$shipping_area === 'Inside Dhaka' ? 'shipping_inside' : 'shipping_outside'] ?? 0) * $factor;
-                }) ?: setting('delivery_charge')->{$shipping_area === 'Inside Dhaka' ? 'inside_dhaka' : 'outside_dhaka'} ?? 0;
-            } else {
-                $shipping_cost = $products->max(function ($item) use ($shipping_area) {
-                    $item = (array) $item;
-                    $factor = (setting('show_option')->quantitywise_delivery_charge ?? false) ? ($item['quantity'] ?? 1) : 1;
-
-                    return ($item[$shipping_area === 'Inside Dhaka' ? 'shipping_inside' : 'shipping_outside'] ?? 0) * $factor;
-                }) ?: setting('delivery_charge')->{$shipping_area === 'Inside Dhaka' ? 'inside_dhaka' : 'outside_dhaka'} ?? 0;
-            }
-        }
-
-        $freeDelivery = setting('free_delivery');
-
-        if (! ($freeDelivery->enabled ?? false) || ($freeDelivery->enabled ?? false) == 'false') {
-            return $shipping_cost;
-        }
-
-        if ($freeDelivery->for_all ?? false) {
-            if ($subtotal < $freeDelivery->min_amount) {
-                return $shipping_cost;
-            }
-            $quantity = $products->sum(function ($product) {
-                $product = (array) $product;
-
-                return $product['quantity'] ?? 0;
-            });
-            if ($quantity < $freeDelivery->min_quantity) {
-                return $shipping_cost;
-            }
-
-            $this->isFreeDelivery = true;
-
-            return 0;
-        }
-
-        foreach ((array) ($freeDelivery->products ?? []) as $id => $qty) {
-            if ($products->where('parent_id', $id)->where('quantity', '>=', $qty)->count()) {
-                $this->isFreeDelivery = true;
-
-                return 0;
-            }
-        }
-
-        return $shipping_cost;
+        return $shippingCost;
     }
 
     public function getActivitylogOptions(): LogOptions
@@ -569,6 +631,7 @@ class Order extends Model
             'admin_id' => 'integer',
             'products' => 'array',
             'data' => 'array',
+            'tracking' => 'array',
             'status_at' => 'datetime',
             'shipped_at' => 'datetime',
         ];

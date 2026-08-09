@@ -1,14 +1,17 @@
 @extends('layouts.yellow.master')
-
-@push('head')
-    @if (isset($category) && $category instanceof \Illuminate\Database\Eloquent\Model)
+@if (isset($category) && $category instanceof \Illuminate\Database\Eloquent\Model)
+    @section('seo_tags')
         {!! seo()->for($category) !!}
-    @elseif(isset($brand) && $brand instanceof \Illuminate\Database\Eloquent\Model)
+    @endsection
+@elseif(isset($brand) && $brand instanceof \Illuminate\Database\Eloquent\Model)
+    @section('seo_tags')
         {!! seo()->for($brand) !!}
-    @elseif(isset($section) && $section instanceof \Illuminate\Database\Eloquent\Model)
+    @endsection
+@elseif(isset($section) && $section instanceof \Illuminate\Database\Eloquent\Model)
+    @section('seo_tags')
         {!! seo()->for($section) !!}
-    @endif
-@endpush
+    @endsection
+@endif
 
 @section('title', 'Products')
 
@@ -149,6 +152,25 @@
 
                             <div class="pt-0 products-view__pagination">
                                 {!! $products->appends(request()->query())->links() !!}
+                            </div>
+                        @endif
+
+                        @php
+                            $descriptionContent = null;
+                            if (isset($category) && $category instanceof \Illuminate\Database\Eloquent\Model && !empty($category->content)) {
+                                $descriptionContent = $category->content;
+                            } elseif (isset($brand) && $brand instanceof \Illuminate\Database\Eloquent\Model && !empty($brand->content)) {
+                                $descriptionContent = $brand->content;
+                            } elseif (isset($section) && $section instanceof \Illuminate\Database\Eloquent\Model && !empty($section->content)) {
+                                $descriptionContent = $section->content;
+                            }
+                        @endphp
+
+                        @if ($descriptionContent)
+                            <div class="card mt-4 category-brand-content-section border-0 shadow-sm">
+                                <div class="card-body p-4 text-justify">
+                                    {!! $descriptionContent !!}
+                                </div>
                             </div>
                         @endif
                     </div>

@@ -24,6 +24,8 @@ return [
 
     'only_admin_can_return_or_deliver' => env('ONLY_ADMIN_CAN_RETURN_OR_DELIVER', false),
 
+    'packaging_charge' => env('PACKAGING_CHARGE', 25),
+
     'unregister_sw' => env('UNREGISTER_SW', false),
 
     /*
@@ -76,6 +78,8 @@ return [
 
     'thank_you_img' => env('APP_THANK_YOU_IMG', null),
 
+    'footer_view' => env('APP_FOOTER_VIEW', 'partials.footer-default'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Environment
@@ -101,6 +105,7 @@ return [
     */
 
     'debug' => (bool) env('APP_DEBUG', false),
+    'debug_key' => env('APP_DEBUG_KEY'),
 
     /*
     |--------------------------------------------------------------------------

@@ -11,7 +11,9 @@ use App\Models\Product;
 use App\Models\User;
 use App\Notifications\User\AccountCreated;
 use App\Notifications\User\OrderPlaced;
+use App\Services\DeliveryAreaService;
 use App\Services\FacebookPixelService;
+use App\Traits\ResolvesPackagingCharge;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Cookie;
@@ -25,6 +27,8 @@ use function Illuminate\Support\defer;
 
 class Checkout extends Component
 {
+    use ResolvesPackagingCharge;
+
     public ?Order $order = null;
 
     public $isFreeDelivery = false;
@@ -68,6 +72,12 @@ class Checkout extends Component
      * should not be overridden by automatic shipping updates.
      */
     public bool $retailDeliveryFeeManuallySet = false;
+
+    public string $fbp = '';
+
+    public string $fbc = '';
+
+    public string $eventSourceUrl = '';
 
     protected $facebookService;
 
@@ -277,60 +287,17 @@ class Checkout extends Component
             return 0;
         }
 
-        $this->isFreeDelivery = false;
         $area ??= $this->shipping;
-        $shipping_cost = 0;
-        if ($area) {
-            if (setting('show_option')->productwise_delivery_charge ?? false) {
-                $shipping_cost = cart()->content()->sum(function ($item) use ($area) {
-                    $factor = (setting('show_option')->quantitywise_delivery_charge ?? false) ? $item->qty : 1;
-                    if ($area == 'Inside Dhaka') {
-                        return $item->options->shipping_inside * $factor;
-                    } else {
-                        return $item->options->shipping_outside * $factor;
-                    }
-                });
-            } else {
-                $shipping_cost = cart()->content()->max(function ($item) use ($area) {
-                    $factor = (setting('show_option')->quantitywise_delivery_charge ?? false) ? $item->qty : 1;
-                    if ($area == 'Inside Dhaka') {
-                        return $item->options->shipping_inside * $factor;
-                    } else {
-                        return $item->options->shipping_outside * $factor;
-                    }
-                });
-            }
-        }
+        $isFree = false;
+        $shippingCost = app(DeliveryAreaService::class)->calculateShippingCost(
+            $area,
+            cart()->content(),
+            (float) cart()->subTotal(),
+            $isFree
+        );
+        $this->isFreeDelivery = $isFree;
 
-        $freeDelivery = setting('free_delivery');
-
-        if (! ((bool) ($freeDelivery->enabled ?? false)) || ($freeDelivery->enabled ?? false) == 'false') {
-            return $shipping_cost;
-        }
-
-        if ($freeDelivery->for_all ?? false) {
-            if (cart()->subTotal() < $freeDelivery->min_amount) {
-                return $shipping_cost;
-            }
-            $quantity = cart()->content()->sum(fn ($product) => $product->qty);
-            if ($quantity < $freeDelivery->min_quantity) {
-                return $shipping_cost;
-            }
-
-            $this->isFreeDelivery = true;
-
-            return 0;
-        }
-
-        foreach ((array) ($freeDelivery->products ?? []) as $id => $qty) {
-            if (cart()->content()->where('options.parent_id', $id)->where('qty', '>=', $qty)->count()) {
-                $this->isFreeDelivery = true;
-
-                return 0;
-            }
-        }
-
-        return $shipping_cost;
+        return $shippingCost;
     }
 
     public function updatedShipping(): void
@@ -374,15 +341,9 @@ class Checkout extends Component
         //     $this->phone = '+880';
         // }
 
-        $default_area = setting('default_area');
-        if ($default_area->inside ?? false) {
-            $shipping = 'Inside Dhaka';
-            if (! $this->retailDeliveryFeeManuallySet) {
-                $this->retailDeliveryFee = $this->shippingCost($shipping);
-            }
-        }
-        if ($default_area->outside ?? false) {
-            $shipping = 'Outside Dhaka';
+        $defaultArea = collect(setting('delivery_areas') ?? [])->first(fn ($a) => (bool) data_get($a, 'is_default'));
+        if ($defaultArea) {
+            $shipping = data_get($defaultArea, 'name');
             if (! $this->retailDeliveryFeeManuallySet) {
                 $this->retailDeliveryFee = $this->shippingCost($shipping);
             }
@@ -519,6 +480,7 @@ class Checkout extends Component
                 'coupon_code' => $this->applied_coupon?->code,
                 'subtotal' => cart()->subtotal(),
                 'purchase_cost' => cart()->content()->sum(fn ($item): int|float => ($item->options->purchase_price ?: $item->options->price) * $item->qty),
+                'packaging_charge' => $this->resolvePackagingCharge($data['products']),
             ];
 
             // Add city and area data if Pathao is enabled and user_selects_city_area is checked
@@ -528,6 +490,23 @@ class Checkout extends Component
                 $orderData['courier'] = 'Pathao';
             }
 
+            // Capture browser tracking signals at order time
+            $fbp = $this->fbp;
+            $fbc = $this->fbc;
+
+            // Auto-build fbc from fbclid URL param if cookie was absent
+            if (empty($fbc) && request()->has('fbclid')) {
+                $fbc = 'fb.1.'.now()->getTimestampMs().'.'.request()->query('fbclid');
+            }
+
+            $orderTracking = [
+                'fbp' => $fbp,
+                'fbc' => $fbc,
+                'ip' => request()->ip(),
+                'ua' => request()->userAgent(),
+                'event_source_url' => $this->eventSourceUrl ?: url()->current(),
+            ];
+
             $data += [
                 'source_id' => config('app.instant_order_forwarding') ? 0 : null,
                 'admin_id' => $admin->id ?? Admin::query()->inRandomOrder()->first()->id,
@@ -536,6 +515,7 @@ class Checkout extends Component
                 'status_at' => now()->toDateTimeString(),
                 // Additional Data
                 'data' => $orderData,
+                'tracking' => $orderTracking,
             ];
 
             $order = Order::create($data);
@@ -564,16 +544,34 @@ class Checkout extends Component
                 Cache::increment('fraud:daily:'.$order->phone);
             });
 
-            if (config('meta-pixel.meta_pixel')) {
-                $this->facebookService->trackPurchase([
+            if (setting('meta_pixel') || config('meta-pixel.meta_pixel') || setting('pixel_ids')) {
+                $orderPayload = [
                     'id' => $order->id,
                     'total' => $order->data['subtotal'],
-                ], $data['products'], [
+                ];
+                $userDataArr = [
                     'name' => $user->name,
                     'email' => $user->email,
                     'phone' => $user->phone_number,
                     'external_id' => $user->id,
-                ], $this);
+                ];
+                $orderTrackingData = $order->tracking ?? [];
+
+                // Generate persistent event ID for Lead/Purchase to be reused on thank you page
+                $eventName = config('meta-pixel.advanced_tracking') ? 'Lead' : 'Purchase';
+                $eventId = 'ch_'.strtolower($eventName).'_'.$order->id.'_'.time();
+                $orderTrackingData['event_id'] = $eventId;
+
+                // Save updated tracking data back to order
+                $order->update(['tracking' => $orderTrackingData]);
+
+                if (config('meta-pixel.advanced_tracking')) {
+                    // Advanced tracking: fire Lead at checkout, Purchase on order confirmation
+                    $this->facebookService->trackLead($orderPayload, $data['products'], $userDataArr, $this, $orderTrackingData);
+                } else {
+                    // Standard tracking: fire Purchase immediately at checkout
+                    $this->facebookService->trackPurchase($orderPayload, $data['products'], $userDataArr, $this, $orderTrackingData);
+                }
             }
 
             return $order;
@@ -629,6 +627,8 @@ class Checkout extends Component
             ? 'livewire.checkout-simple'
             : 'livewire.checkout';
 
+        $cartProductIds = cart()->content()->pluck('id')->filter()->unique()->values()->toArray();
+
         return view($view, [
             'user' => optional(auth('user')->user()),
             'pathaoCities' => collect($tempOrder->pathaoCityList()),
@@ -637,11 +637,16 @@ class Checkout extends Component
             'advanced' => $this->advanced,
             'retailDeliveryFee' => $this->retailDeliveryFee,
             'retailDiscount' => $this->retailDiscount,
+            'packagingCharge' => $this->resolvePackagingCharge(array_flip($cartProductIds)),
         ]);
     }
 
     protected function fillFromCookie(): bool
     {
+        if (isOninda() && config('app.resell')) {
+            return false;
+        }
+
         return true;
     }
 

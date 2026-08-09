@@ -9,6 +9,8 @@ use App\Models\OrderNote;
 use App\Models\Product;
 use App\Models\User;
 use App\Notifications\User\OrderConfirmed;
+use App\Services\FacebookPixelService;
+use App\Traits\ResolvesPackagingCharge;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -17,6 +19,15 @@ use Livewire\Component;
 
 class EditOrder extends Component
 {
+    use ResolvesPackagingCharge;
+
+    protected FacebookPixelService $facebookService;
+
+    public function boot(FacebookPixelService $facebookService): void
+    {
+        $this->facebookService = $facebookService;
+    }
+
     private array $attrs = [
         'name', 'phone', 'email', 'address', 'note', 'status',
     ];
@@ -118,7 +129,7 @@ class EditOrder extends Component
         $this->retail_delivery_fee = (int) ($this->order->data['retail_delivery_fee'] ?? 0);
         $this->shipping_cost = (int) ($this->order->data['shipping_cost'] ?? 0);
         $this->subtotal = (int) ($this->order->data['subtotal'] ?? 0);
-        $this->packaging_charge = (int) ($this->order->data['packaging_charge'] ?? 25);
+        $this->packaging_charge = (int) ($this->order->data['packaging_charge'] ?? config('app.packaging_charge', 25));
         $this->weight = (float) ($this->order->data['weight'] ?? 0.5);
 
         // Handle string properties
@@ -300,13 +311,23 @@ class EditOrder extends Component
 
     public function updatedShippingArea($value): void
     {
-        $this->fill([
-            'subtotal' => $subtotal = $this->order->getSubtotal($this->selectedProducts),
-            'shipping_cost' => $this->order->getShippingCost($this->selectedProducts, $subtotal, $value),
-        ]);
-        if (! isOninda() || ! config('app.resell')) {
-            $this->fill(['retail_delivery_fee' => $this->shipping_cost]);
-            $this->updatedRetailDeliveryFee($this->shipping_cost);
+        $shippingCost = $this->order->getShippingCost($this->selectedProducts, $this->order->getSubtotal($this->selectedProducts), $value);
+
+        $this->subtotal = $this->order->getSubtotal($this->selectedProducts);
+        $this->shipping_cost = $shippingCost;
+
+        if (isOninda() && config('app.resell') && ! is_null($this->order?->user)) {
+            // Reseller order on resell site: use reseller's custom rate (falls back to admin rate)
+            $this->retail_delivery_fee = $this->order->user->getShippingCost($value);
+        } else {
+            // Non-reseller order: mirror admin delivery cost
+            $this->retail_delivery_fee = $shippingCost;
+        }
+        $this->updatedRetailDeliveryFee($this->retail_delivery_fee);
+
+        if (isOninda() && config('app.resell')) {
+            $this->packaging_charge = $this->resolvePackagingCharge($this->selectedProducts);
+            $this->updatedPackagingCharge($this->packaging_charge);
         }
     }
 
@@ -314,7 +335,7 @@ class EditOrder extends Component
     {
         $this->order->fill(['data' => array_merge($this->order->data, ['retail_delivery_fee' => $value])]);
         if (isOninda() && ! config('app.resell')) {
-            $this->fill(['shipping_cost' => $value]);
+            $this->shipping_cost = $value;
         }
     }
 
@@ -336,7 +357,7 @@ class EditOrder extends Component
         }
 
         if (isOninda() && ! config('app.resell')) {
-            $this->fill(['retail_discount' => $this->discount]);
+            $this->retail_discount = $this->discount;
         }
 
         $this->order
@@ -347,9 +368,12 @@ class EditOrder extends Component
             ->fill(['products' => $this->selectedProducts]);
 
         if ($this->order->exists) {
+            $statusChanged = $this->order->status != $this->status;
+            $newStatus = $this->status;
             $confirming = false;
-            if ($this->order->status != $this->status) {
-                $confirming = $this->status === 'CONFIRMED';
+
+            if ($statusChanged) {
+                $confirming = $newStatus === 'CONFIRMED';
                 $this->order->forceFill([
                     'status_at' => now()->toDateTimeString(),
                 ]);
@@ -363,6 +387,34 @@ class EditOrder extends Component
 
             if ($confirming && ($user = $this->order->user)) {
                 $user->notify(new OrderConfirmed($this->order));
+            }
+
+            // Fire pixel events when status changes and pixel is configured
+            if ($statusChanged && (setting('meta_pixel') || config('meta-pixel.meta_pixel')) && config('meta-pixel.advanced_tracking')) {
+                $products = collect($this->order->products)->values()->all();
+                $orderArr = [
+                    'id' => $this->order->id,
+                    'total' => $this->order->data['subtotal'] ?? 0,
+                ];
+                $userData = [];
+                $orderTracking = $this->order->tracking ?? [];
+
+                if ($user = $this->order->user) {
+                    $userData = [
+                        'name' => $user->name,
+                        'email' => $user->email,
+                        'phone' => $user->phone_number,
+                        'external_id' => $user->id,
+                    ];
+                }
+
+                if ($newStatus === 'CONFIRMED') {
+                    $this->facebookService->trackPurchase($orderArr, $products, $userData, null, $orderTracking);
+                } elseif ($newStatus === 'CANCELLED') {
+                    $this->facebookService->trackOrderCancelled($orderArr, $products, $userData, null, $orderTracking);
+                } elseif (in_array($newStatus, ['RETURNED', 'PAID_RETURN'])) {
+                    $this->facebookService->trackOrderReturned($orderArr, $products, $userData, null, $orderTracking);
+                }
             }
 
             session()->flash('success', 'Order updated successfully.');

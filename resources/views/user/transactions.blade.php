@@ -64,6 +64,11 @@
                                         <th>Date</th>
                                         <th>Status</th>
                                         <th>Details</th>
+                                        <th>Subtotal</th>
+                                        <th>Delivery</th>
+                                        <th>Advanced</th>
+                                        <th>Packaging</th>
+                                        <th>Total</th>
                                     </tr>
                                 </thead>
                             </table>
@@ -153,6 +158,36 @@
                 {
                     data: 'meta',
                     name: 'meta',
+                },
+                {
+                    data: 'subtotal',
+                    name: 'subtotal',
+                    orderable: false,
+                    searchable: false
+                },
+                {
+                    data: 'delivery_charge',
+                    name: 'delivery_charge',
+                    orderable: false,
+                    searchable: false
+                },
+                {
+                    data: 'advanced',
+                    name: 'advanced',
+                    orderable: false,
+                    searchable: false
+                },
+                {
+                    data: 'packaging_charge',
+                    name: 'packaging_charge',
+                    orderable: false,
+                    searchable: false
+                },
+                {
+                    data: 'total',
+                    name: 'total',
+                    orderable: false,
+                    searchable: false
                 }
             ],
             order: [

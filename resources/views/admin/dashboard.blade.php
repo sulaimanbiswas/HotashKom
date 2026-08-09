@@ -87,44 +87,44 @@
                     <div class="col-xl-4 box-col-4 col-lg-4 col-md-4">
                         <div class="rounded-sm card o-hidden">
                             <div class="p-3 card-body">
-                                <div class="ecommerce-widgets media">
+                                <a href="{{ route('admin.products.index') }}" class="ecommerce-widgets media">
                                     <div class="media-body">
                                         <p class="mb-2 f-w-500 font-roboto">Total Products</p>
                                         <h4 class="mb-0 f-w-500 f-26"><span class="counter">{{ $productsCount }}</span></h4>
                                     </div>
                                     <div class="ecommerce-box light-bg-primary"><i class="fa fa-heart"
                                             aria-hidden="true"></i></div>
-                                </div>
+                                </a>
                             </div>
                         </div>
                     </div>
                     <div class="col-xl-4 box-col-4 col-lg-4 col-md-4">
                         <div class="rounded-sm card o-hidden">
                             <div class="p-3 card-body">
-                                <div class="ecommerce-widgets media">
+                                <a href="{{ route('admin.products.index', ['only' => 'inactive']) }}" class="ecommerce-widgets media">
                                     <div class="media-body">
                                         <p class="mb-2 f-w-500 font-roboto">Inactive Products</p>
                                         <h4 class="mb-0 f-w-500 f-26"><span
-                                                class="counter">{{ $inactiveProducts->count() }}</span></h4>
+                                                class="counter">{{ $inactiveProductsCount }}</span></h4>
                                     </div>
                                     <div class="ecommerce-box light-bg-primary"><i class="fa fa-heart"
                                             aria-hidden="true"></i></div>
-                                </div>
+                                </a>
                             </div>
                         </div>
                     </div>
                     <div class="col-xl-4 box-col-4 col-lg-4 col-md-4">
                         <div class="rounded-sm card o-hidden">
                             <div class="p-3 card-body">
-                                <div class="ecommerce-widgets media">
+                                <a href="{{ route('admin.products.index', ['only' => 'low-stock']) }}" class="ecommerce-widgets media">
                                     <div class="media-body">
                                         <p class="mb-2 f-w-500 font-roboto">Low Stock</p>
                                         <h4 class="mb-0 f-w-500 f-26"><span
-                                                class="counter">{{ $lowStockProducts->count() }}</span></h4>
+                                                class="counter">{{ $lowStockProductsCount }}</span></h4>
                                     </div>
                                     <div class="ecommerce-box light-bg-primary"><i class="fa fa-heart"
                                             aria-hidden="true"></i></div>
-                                </div>
+                                </a>
                             </div>
                         </div>
                     </div>
@@ -196,6 +196,7 @@
                 </div>
             </div>
             <div class="col-xl-4 xl-50 box-col-12">
+                @isset($inactiveProducts)
                 <div class="rounded-sm card">
                     <div class="p-4 card-header card-no-border">
                         <h5>Inactive Products</h5>
@@ -239,6 +240,7 @@
                         </div>
                     </div>
                 </div>
+                @endisset
                 <div class="rounded-sm card">
                     <div class="p-3 card-header">
                         <h5>Staffs</h5>
@@ -278,8 +280,82 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="rounded-sm card d-none">
+                    <div class="p-3 card-header d-flex justify-content-between align-items-center">
+                        <h5>Server Information</h5>
+                        <span class="badge badge-primary">{{ $serverInfo['os'] }}</span>
+                    </div>
+                    <div class="p-3 card-body">
+                        <div class="table-responsive">
+                            <table class="table table-borderless table-sm mb-0">
+                                <tbody>
+                                    <tr>
+                                        <td class="pl-0 font-weight-bold" style="width: 40%;">Server IP:</td>
+                                        <td class="pr-0 text-right">{{ $serverInfo['ip'] }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="pl-0 font-weight-bold">Web Server:</td>
+                                        <td class="pr-0 text-right text-truncate" style="max-width: 180px;" title="{{ $serverInfo['server_software'] }}">
+                                            {{ $serverInfo['server_software'] }}
+                                        </td>
+                                    </tr>
+                                    <tr>
+                                        <td class="pl-0 font-weight-bold">PHP Version:</td>
+                                        <td class="pr-0 text-right">{{ $serverInfo['php_version'] }}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="pl-0 font-weight-bold">DB Version:</td>
+                                        <td class="pr-0 text-right text-truncate" style="max-width: 180px;" title="{{ $serverInfo['db_version'] }}">
+                                            {{ $serverInfo['db_version'] }}
+                                        </td>
+                                    </tr>
+                                    @if ($serverInfo['cpu_model'] !== 'Unknown')
+                                    <tr>
+                                        <td class="pl-0 font-weight-bold">CPU Model:</td>
+                                        <td class="pr-0 text-right text-truncate" style="max-width: 180px;" title="{{ $serverInfo['cpu_model'] }}">
+                                            {{ $serverInfo['cpu_model'] }}
+                                        </td>
+                                    </tr>
+                                    @endif
+                                    @if ($serverInfo['cpu_cores'] !== 'Unknown')
+                                    <tr>
+                                        <td class="pl-0 font-weight-bold">CPU Cores:</td>
+                                        <td class="pr-0 text-right">{{ $serverInfo['cpu_cores'] }} Cores</td>
+                                    </tr>
+                                    @endif
+                                </tbody>
+                            </table>
+                        </div>
+
+                        @if ($serverInfo['ram_total'] !== 'Unknown')
+                        <div class="mt-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="font-weight-bold text-nowrap">RAM ({{ $serverInfo['ram_used'] }} / {{ $serverInfo['ram_total'] }})</span>
+                                <span>{{ $serverInfo['ram_percentage'] }}%</span>
+                            </div>
+                            <div class="progress" style="height: 6px;">
+                                <div class="progress-bar bg-info" role="progressbar" style="width: {{ $serverInfo['ram_percentage'] }}%" aria-valuenow="{{ $serverInfo['ram_percentage'] }}" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </div>
+                        @endif
+
+                        @if ($serverInfo['disk_total'] !== 'Unknown')
+                        <div class="mt-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span class="font-weight-bold text-nowrap">Disk Space ({{ $serverInfo['disk_used'] }} / {{ $serverInfo['disk_total'] }})</span>
+                                <span>{{ $serverInfo['disk_percentage'] }}%</span>
+                            </div>
+                            <div class="progress" style="height: 6px;">
+                                <div class="progress-bar bg-success" role="progressbar" style="width: {{ $serverInfo['disk_percentage'] }}%" aria-valuenow="{{ $serverInfo['disk_percentage'] }}" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </div>
+                        @endif
+                    </div>
+                </div>
             </div>
             <div class="col-xl-4 xl-50 box-xl-12">
+                @isset($lowStockProducts)
                 <div class="rounded-sm card">
                     <div class="p-4 card-header card-no-border">
                         <h5>Low Stock</h5>
@@ -315,6 +391,7 @@
                         </div>
                     </div>
                 </div>
+                @endisset
                 @if(isOninda() && config('app.resell'))
                 <div class="rounded-sm card">
                     <div class="p-3 card-header d-flex justify-content-between align-items-center">

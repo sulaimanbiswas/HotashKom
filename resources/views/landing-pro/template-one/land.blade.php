@@ -5,10 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ data_get($landingPagePro->seo, 'title', $landingPagePro->title) }}</title>
-    @if (filled(data_get($landingPagePro->seo, 'description')))
-        <meta name="description" content="{{ data_get($landingPagePro->seo, 'description') }}">
-    @endif
+    <title>{{ data_get($landingPagePro->seo, 'title') ?: $landingPagePro->title }}</title>
+    <meta name="description" content="{{ data_get($landingPagePro->seo, 'description') ?: 'আমাদের প্রতিটি পণ্য এক্সপোর্ট কোয়ালিটি সম্পন্ন। Premium Trousers for Premium Customers.' }}">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
@@ -17,6 +15,19 @@
         [x-cloak] {
             display: none !important;
         }
+
+        body {
+            visibility: hidden;
+        }
+    </style>
+    <noscript>
+        <style>
+            body {
+                visibility: visible !important;
+            }
+        </style>
+    </noscript>
+    <style>
 
         .no-scrollbar::-webkit-scrollbar {
             display: none;
@@ -40,6 +51,52 @@
             scroll-snap-align: start;
         }
     </style>
+    <x-metapixel-head />
+    <script>
+        window._csrfToken = '{{ csrf_token() }}';
+        window.trackingConfig = {
+            pixelIds: {{ Js::from(app(App\Services\FacebookPixelService::class)->getPixelIds()) }},
+            pixelEnabled: {{ (setting('meta_pixel') || config('meta-pixel.meta_pixel') || setting('pixel_ids')) ? 'true' : 'false' }},
+            advancedTracking: {{ config('meta-pixel.advanced_tracking') ? 'true' : 'false' }},
+        };
+        window.dataLayer = window.dataLayer || [];
+
+        (function() {
+            if (typeof fbq === 'function' && window.trackingConfig && window.trackingConfig.pixelIds && window.trackingConfig.pixelIds.length > 0) {
+                var userData = {{ Js::from(app(App\Services\FacebookPixelService::class)->getNormalizedUserData()) }};
+                var hasUserData = userData && (Array.isArray(userData) ? userData.length > 0 : Object.keys(userData).length > 0);
+                var initializedPixels = window.initializedMetaPixels || {};
+                
+                function isPixelInitialized(pixelId) {
+                    if (initializedPixels[pixelId]) return true;
+                    if (typeof fbq.instance === 'object' && fbq.instance.pixels && fbq.instance.pixels.hasOwnProperty(pixelId)) return true;
+                    if (Array.isArray(fbq.queue)) {
+                        for (var i = 0; i < fbq.queue.length; i++) {
+                            var item = fbq.queue[i];
+                            if (Array.isArray(item) && item[0] === 'init' && item[1] === pixelId) {
+                                return true;
+                            }
+                        }
+                    }
+                    return false;
+                }
+
+                window.trackingConfig.pixelIds.forEach(function(pixelId) {
+                    var isInitialized = isPixelInitialized(pixelId);
+                    if (!isInitialized || hasUserData) {
+                        if (hasUserData) {
+                            fbq('init', pixelId, userData);
+                        } else {
+                            fbq('init', pixelId);
+                        }
+                        initializedPixels[pixelId] = true;
+                    }
+                });
+                window.initializedMetaPixels = initializedPixels;
+                fbq('track', 'PageView');
+            }
+        })();
+    </script>
 </head>
 
 @php
@@ -55,8 +112,18 @@
         return $normalized;
     };
 
-    $normalizedCallPhone = $normalizePhone($company->phone ?? '');
-    $normalizedWhatsappPhone = $normalizePhone($company->whatsapp ?? '');
+    $rawCallPhone = data_get($sections, 'phone');
+    if (blank($rawCallPhone)) {
+        $rawCallPhone = $company->phone ?? '';
+    }
+
+    $rawWhatsappPhone = data_get($sections, 'whatsapp');
+    if (blank($rawWhatsappPhone)) {
+        $rawWhatsappPhone = $company->whatsapp ?? ($company->phone ?? '');
+    }
+
+    $normalizedCallPhone = $normalizePhone($rawCallPhone);
+    $normalizedWhatsappPhone = $normalizePhone($rawWhatsappPhone);
     $social = setting('social');
 
     $callUrl = $normalizedCallPhone ? 'tel:+' . $normalizedCallPhone : '#order';
@@ -71,9 +138,11 @@
     }
 
     $showAnnouncementBar = data_get($sections, 'announcement_bar.enabled', true);
-    $deliveryCharge = setting('delivery_charge');
-    $insideDhakaDeliveryCharge = (int) data_get($deliveryCharge, 'inside_dhaka', 0);
-    $outsideDhakaDeliveryCharge = (int) data_get($deliveryCharge, 'outside_dhaka', 0);
+    $deliveryAreaService = app(\App\Services\DeliveryAreaService::class);
+    $deliveryAreas = $deliveryAreaService->getDeliveryAreas();
+    $defaultDeliveryArea = $deliveryAreaService->getDefaultAreaName();
+    $insideDhakaDeliveryCharge = (int) ($deliveryAreas->firstWhere('name', 'Inside Dhaka')['cost'] ?? 70);
+    $outsideDhakaDeliveryCharge = (int) ($deliveryAreas->firstWhere('name', 'Outside Dhaka')['cost'] ?? 120);
 
     $parseLines = function (?string $value): array {
         return collect(preg_split('/\r\n|\r|\n/', (string) $value))
@@ -133,6 +202,7 @@
 
     if (empty($sizeRows)) {
         $sizeRows = [
+            ['size' => 'SIZE', 'waist' => 'WAIST (কোমর)', 'length' => 'LENGTH (লেন্থ)'],
             ['size' => 'M', 'waist' => '28-30', 'length' => '38'],
             ['size' => 'L', 'waist' => '30-32', 'length' => '39'],
             ['size' => 'XL', 'waist' => '32-34', 'length' => '40'],
@@ -220,6 +290,13 @@
                 ->all();
         })
         ->values()
+        ->map(function (array $product, int $index): array {
+            if ($index === 0) {
+                $product['selected'] = true;
+            }
+
+            return $product;
+        })
         ->all();
 
     $videoUrl = data_get($sections, 'video.url', 'https://www.youtube.com/embed/dQw4w9WgXcQ');
@@ -252,7 +329,7 @@
 
     @foreach ($configuredSectionOrder as $sectionKey)
         @includeIf('landing-pro.template-one.sections.' . $sectionKey)
-        @if (isset($ctaSectionMap[$sectionKey]))
+        @if (isset($ctaSectionMap[$sectionKey]) && data_get($sections, $sectionKey . '.enabled', true))
             @includeIf('landing-pro.template-one.sections.' . $ctaSectionMap[$sectionKey])
         @endif
     @endforeach
@@ -270,11 +347,18 @@
                 },
                 galleryIndex: 0,
                 reviewIndex: 0,
+                touchStartX: 0,
+                touchStartY: 0,
+                touchEndX: 0,
+                touchEndY: 0,
+                galleryInterval: null,
+                reviewInterval: null,
+                deliveryAreas: @json($deliveryAreas),
                 checkout: {
                     name: '',
                     phone: '',
                     address: '',
-                    deliveryArea: '',
+                    deliveryArea: @json($defaultDeliveryArea),
                     touched: {
                         name: false,
                         phone: false,
@@ -287,12 +371,21 @@
                 products: @json($productsPayload),
 
                 init() {
-                    this.startTimer(new Date().getTime() + 86400000);
+                    this.startTimer();
+                    if (this.products.length > 0 && !this.products.some((p) => p.selected)) {
+                        this.products[0].selected = true;
+                    }
                     this.products.forEach((_, index) => this.selectVariantByAttributes(index));
                     this.$nextTick(() => {
                         this.initCarouselWidths();
                         this.goToReview(0);
                         this.goToGallery(0);
+                        if (this.$refs.galleryTrack) {
+                            this.startGalleryAutoSlide();
+                        }
+                        if (this.$refs.reviewTrack) {
+                            this.startReviewAutoSlide();
+                        }
                         window.addEventListener('resize', () => this.initCarouselWidths());
                     });
                 },
@@ -333,17 +426,52 @@
                     }
                 },
 
-                startTimer(expiry) {
-                    setInterval(() => {
-                        const diff = expiry - new Date().getTime();
-                        if (diff < 0) {
-                            return;
+                startTimer() {
+                    const ONE_HOUR_MS = 60 * 60 * 1000;
+                    const storageKey = 'lp_timer_target_{{ $landingPagePro->slug }}';
+
+                    const getValidTargetExpiry = () => {
+                        const now = Date.now();
+                        let saved = null;
+                        try {
+                            saved = localStorage.getItem(storageKey);
+                        } catch (e) {
+                            // localStorage disabled or restricted fallback
+                        }
+                        let targetExpiry = saved ? parseInt(saved, 10) : 0;
+                        let remaining = targetExpiry - now;
+
+                        if (!targetExpiry || isNaN(targetExpiry) || remaining < ONE_HOUR_MS) {
+                            const randomDurationMs = Math.floor((3600 + Math.random() * 10800) * 1000);
+                            targetExpiry = now + randomDurationMs;
+                            try {
+                                localStorage.setItem(storageKey, targetExpiry.toString());
+                            } catch (e) {
+                                // ignore
+                            }
                         }
 
-                        this.timer.hours = String(Math.floor((diff / (1000 * 60 * 60)) % 24)).padStart(2, '0');
-                        this.timer.minutes = String(Math.floor((diff / 1000 / 60) % 60)).padStart(2, '0');
+                        return targetExpiry;
+                    };
+
+                    let targetExpiry = getValidTargetExpiry();
+
+                    const updateDisplay = () => {
+                        const now = Date.now();
+                        let diff = targetExpiry - now;
+
+                        if (diff < ONE_HOUR_MS) {
+                            targetExpiry = getValidTargetExpiry();
+                            diff = targetExpiry - now;
+                        }
+
+                        this.timer.hours = String(Math.floor(diff / (1000 * 60 * 60))).padStart(2, '0');
+                        this.timer.minutes = String(Math.floor((diff / (1000 * 60)) % 60)).padStart(2, '0');
                         this.timer.seconds = String(Math.floor((diff / 1000) % 60)).padStart(2, '0');
-                    }, 1000);
+                    };
+
+                    updateDisplay();
+                    setInterval(updateDisplay, 1000);
                 },
 
                 increment(index) {
@@ -492,9 +620,22 @@
                     return this.selectedItems.reduce((sum, item) => sum + (item.price * item.qty), 0);
                 },
 
+                get currentDeliveryAreaSetting() {
+                    if (!Array.isArray(this.deliveryAreas)) {
+                        return null;
+                    }
+
+                    return this.deliveryAreas.find((a) => a.name === this.checkout.deliveryArea) || this.deliveryAreas[0] || null;
+                },
+
                 get deliveryCharge() {
                     if (this.hasFreeDeliveryItem) {
                         return 0;
+                    }
+
+                    const currentArea = this.currentDeliveryAreaSetting;
+                    if (currentArea) {
+                        return Number(currentArea.cost || 0);
                     }
 
                     return this.checkout.deliveryArea === 'outside' ? this.outsideDhakaDeliveryCharge : this
@@ -527,36 +668,127 @@
 
                 nextReview() {
                     const total = {{ count($reviews) }};
+                    if (total === 0) {
+                        return;
+                    }
                     this.reviewIndex = (this.reviewIndex + 1) % total;
                     this.scrollToIndex(this.$refs.reviewTrack, this.reviewIndex);
+                    if (this.$refs.reviewTrack) {
+                        this.startReviewAutoSlide();
+                    }
                 },
 
                 prevReview() {
                     const total = {{ count($reviews) }};
+                    if (total === 0) {
+                        return;
+                    }
                     this.reviewIndex = (this.reviewIndex - 1 + total) % total;
                     this.scrollToIndex(this.$refs.reviewTrack, this.reviewIndex);
+                    if (this.$refs.reviewTrack) {
+                        this.startReviewAutoSlide();
+                    }
                 },
 
                 nextGallery() {
                     const total = {{ count($galleryImages) }};
+                    if (total === 0) {
+                        return;
+                    }
                     this.galleryIndex = (this.galleryIndex + 1) % total;
                     this.scrollToIndex(this.$refs.galleryTrack, this.galleryIndex);
+                    if (this.$refs.galleryTrack) {
+                        this.startGalleryAutoSlide();
+                    }
                 },
 
                 prevGallery() {
                     const total = {{ count($galleryImages) }};
+                    if (total === 0) {
+                        return;
+                    }
                     this.galleryIndex = (this.galleryIndex - 1 + total) % total;
                     this.scrollToIndex(this.$refs.galleryTrack, this.galleryIndex);
+                    if (this.$refs.galleryTrack) {
+                        this.startGalleryAutoSlide();
+                    }
                 },
 
                 goToGallery(index) {
                     this.galleryIndex = index;
                     this.scrollToIndex(this.$refs.galleryTrack, this.galleryIndex);
+                    if (this.$refs.galleryTrack) {
+                        this.startGalleryAutoSlide();
+                    }
                 },
 
                 goToReview(index) {
                     this.reviewIndex = index;
                     this.scrollToIndex(this.$refs.reviewTrack, this.reviewIndex);
+                    if (this.$refs.reviewTrack) {
+                        this.startReviewAutoSlide();
+                    }
+                },
+
+                handleTouchStart(e) {
+                    this.touchStartX = e.touches[0].clientX;
+                    this.touchStartY = e.touches[0].clientY;
+                },
+
+                handleTouchEnd(e, type) {
+                    this.touchEndX = e.changedTouches[0].clientX;
+                    this.touchEndY = e.changedTouches[0].clientY;
+                    this.handleSwipe(type);
+                },
+
+                handleSwipe(type) {
+                    const threshold = 50; // minimum distance for swipe
+                    const diffX = this.touchStartX - this.touchEndX;
+                    const diffY = this.touchStartY - this.touchEndY;
+                    
+                    if (Math.abs(diffX) > threshold && Math.abs(diffX) > Math.abs(diffY)) {
+                        if (diffX > 0) {
+                            if (type === 'gallery') {
+                                this.nextGallery();
+                            } else if (type === 'review') {
+                                this.nextReview();
+                            }
+                        } else {
+                            if (type === 'gallery') {
+                                this.prevGallery();
+                            } else if (type === 'review') {
+                                this.prevReview();
+                            }
+                        }
+                    }
+                },
+
+                startGalleryAutoSlide() {
+                    this.stopGalleryAutoSlide();
+                    this.galleryInterval = setInterval(() => {
+                        this.nextGallery();
+                    }, 3000);
+                },
+
+                stopGalleryAutoSlide() {
+                    if (this.galleryInterval) {
+                        clearInterval(this.galleryInterval);
+                        this.galleryInterval = null;
+                    }
+                },
+
+                startReviewAutoSlide() {
+                    this.stopReviewAutoSlide();
+                    this.reviewInterval = setInterval(() => {
+                        this.nextReview();
+                    }, 3000);
+                },
+
+                stopReviewAutoSlide() {
+                    if (this.reviewInterval) {
+                        clearInterval(this.reviewInterval);
+                        this.reviewInterval = null;
+                    }
                 },
 
                 scrollToIndex(track, index, behavior = 'smooth') {
@@ -623,6 +855,40 @@
             };
         }
     </script>
+    <x-metapixel-body />
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            document.body.style.visibility = 'visible';
+        });
+        if (document.readyState === "interactive" || document.readyState === "complete") {
+            document.body.style.visibility = 'visible';
+        }
+    </script>
+
+    <!-- Floating Action Buttons (Call & WhatsApp) -->
+    <div class="fixed bottom-4 right-4 z-50 flex flex-col gap-3 md:bottom-6 md:right-6">
+        @if ($whatsappUrl !== '#order')
+            <a href="{{ $whatsappUrl }}" target="_blank" rel="noopener noreferrer"
+                class="group relative flex h-12 w-12 items-center justify-center rounded-full bg-[#25D366] text-white shadow-2xl transition-all duration-300 hover:scale-110 hover:bg-[#20ba5a] active:scale-95 md:h-14 md:w-14"
+                title="WhatsApp-এ কথা বলুন" aria-label="WhatsApp">
+                <i class="fab fa-whatsapp text-2xl md:text-3xl"></i>
+                <span class="absolute right-16 hidden whitespace-nowrap rounded-md bg-gray-900 px-3 py-1.5 text-xs font-bold text-white opacity-0 shadow-lg transition-opacity duration-200 group-hover:opacity-100 md:block">
+                    WhatsApp-এ কথা বলুন
+                </span>
+            </a>
+        @endif
+
+        @if ($callUrl !== '#order')
+            <a href="{{ $callUrl }}"
+                class="group relative flex h-12 w-12 items-center justify-center rounded-full bg-green-700 text-white shadow-2xl transition-all duration-300 hover:scale-110 hover:bg-green-800 active:scale-95 md:h-14 md:w-14"
+                title="সরাসরি কল করুন" aria-label="Call">
+                <i class="fas fa-phone-alt text-xl md:text-2xl"></i>
+                <span class="absolute right-16 hidden whitespace-nowrap rounded-md bg-gray-900 px-3 py-1.5 text-xs font-bold text-white opacity-0 shadow-lg transition-opacity duration-200 group-hover:opacity-100 md:block">
+                    সরাসরি কল করুন
+                </span>
+            </a>
+        @endif
+    </div>
 </body>
 
 </html>

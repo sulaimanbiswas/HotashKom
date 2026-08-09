@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\CartController;
 use App\Http\Controllers\ApiController;
+use App\Http\Controllers\BlogController;
 use App\Http\Controllers\BrandProductController;
 use App\Http\Controllers\CategoryProductController;
 use App\Http\Controllers\CheckoutController;
@@ -19,6 +20,7 @@ use App\Http\Middleware\EnsureResellerIsVerified;
 use App\Http\Middleware\GoogleTagManagerMiddleware;
 use Hotash\FacebookPixel\MetaPixelMiddleware;
 use Hotash\LaravelMultiUi\Facades\MultiUi;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Session;
 
@@ -138,6 +140,9 @@ Route::middleware([GoogleTagManagerMiddleware::class, MetaPixelMiddleware::class
         Route::get('/categories/{category:slug}/products', CategoryProductController::class)->name('categories.products');
         Route::get('/brands/{brand:slug}/products', BrandProductController::class)->name('brands.products');
 
+        Route::get('/blogs', [BlogController::class, 'index'])->name('blogs.index');
+        Route::get('/blogs/{blog:slug}', [BlogController::class, 'show'])->name('blogs.show');
+
         pageRoutes();
     });
 
@@ -172,3 +177,45 @@ Route::get('/cache-clear', [ApiController::class, 'clearCache'])->name('clear.ca
 // Feed routes
 Route::get('/feed/catalog', [FeedController::class, 'catalog'])->name('feed.catalog');
 Route::get('/feed/catalog-simple', [FeedController::class, 'catalogSimple'])->name('feed.catalog.simple');
+
+// Secure MySQL connection diagnostics — access via /db-status?key=YOUR_DEBUG_KEY
+Route::get('/db-status', function () {
+    $secret = config('app.debug_key');
+    if (! $secret || request('key') !== $secret) {
+        abort(403);
+    }
+
+    $status = collect(DB::select('SHOW GLOBAL STATUS'))
+        ->keyBy('Variable_name');
+
+    $variables = collect(DB::select('SHOW VARIABLES'))
+        ->keyBy('Variable_name');
+
+    $processes = DB::select('SHOW PROCESSLIST');
+
+    return response()->json([
+        'connections' => [
+            'your_website_current' => count($processes), // How many connections your site has right now
+            'server_total_current' => $status->get('Threads_connected')?->Value, // Total connections on the entire shared server
+            'server_limit' => $variables->get('max_connections')?->Value, // Max connections allowed on the server
+            'server_max_ever' => $status->get('Max_used_connections')?->Value, // Max connections ever used simultaneously on the server
+            'aborted_connects' => $status->get('Aborted_connects')?->Value,  // Refused connections server-wide (max_connections hit)
+            'aborted_clients' => $status->get('Aborted_clients')?->Value,   // Dropped connections server-wide
+        ],
+        'timeouts' => [
+            'wait_timeout' => $variables->get('wait_timeout')?->Value,
+            'interactive_timeout' => $variables->get('interactive_timeout')?->Value,
+            'connect_timeout' => $variables->get('connect_timeout')?->Value,
+        ],
+        'traffic' => [
+            'total_connections_ever' => $status->get('Connections')?->Value,
+            'global_queries' => $status->get('Queries')?->Value,
+            'slow_queries' => $status->get('Slow_queries')?->Value,
+            'threads_running' => $status->get('Threads_running')?->Value,   // Actively executing (not sleeping) server-wide
+            'threads_cached' => $status->get('Threads_cached')?->Value,    // Waiting to be reused server-wide
+        ],
+        // Only shows YOUR own connections if you lack PROCESS privilege on shared hosting.
+        'your_process_list' => $processes,
+        'checked_at' => now()->toDateTimeString(),
+    ], 200, [], JSON_PRETTY_PRINT);
+});

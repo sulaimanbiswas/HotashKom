@@ -57,26 +57,18 @@
                         </div>
                         <div class="form-group col-md-9">
                             <div class="form-control @error('shipping') is-invalid @enderror h-auto">
-                                <div class="custom-control custom-radio custom-control-inline">
-                                    <input type="radio" wire:model.live="shipping"
-                                        @change="$wire.updateField('shipping', $event.target.value)"
-                                        class="custom-control-input" id="inside-dhaka" name="shipping"
-                                        value="Inside Dhaka">
-                                    <label class="custom-control-label" for="inside-dhaka">ঢাকা শহর
-                                        ({{ $isFreeDelivery ? 'FREE' : $this->shippingCost('Inside Dhaka') }}
-                                        টাকা)
-                                    </label>
-                                </div>
-                                <div class="custom-control custom-radio custom-control-inline">
-                                    <input type="radio" wire:model.live="shipping"
-                                        @change="$wire.updateField('shipping', $event.target.value)"
-                                        class="custom-control-input" id="outside-dhaka" name="shipping"
-                                        value="Outside Dhaka">
-                                    <label class="custom-control-label" for="outside-dhaka">ঢাকার বাইরে
-                                        ({{ $isFreeDelivery ? 'FREE' : $this->shippingCost('Outside Dhaka') }}
-                                        টাকা)
-                                    </label>
-                                </div>
+                                @foreach (app(\App\Services\DeliveryAreaService::class)->getDeliveryAreas() as $index => $area)
+                                    <div class="custom-control custom-radio custom-control-inline">
+                                        <input type="radio" wire:model.live="shipping"
+                                            @change="$wire.updateField('shipping', $event.target.value)"
+                                            class="custom-control-input" id="shipping-area-{{ $index }}" name="shipping"
+                                            value="{{ data_get($area, 'name') }}">
+                                        <label class="custom-control-label" for="shipping-area-{{ $index }}">{{ data_get($area, 'name') }}
+                                            ({{ $isFreeDelivery ? 'FREE' : $this->shippingCost(data_get($area, 'name')) }}
+                                            টাকা)
+                                        </label>
+                                    </div>
+                                @endforeach
                             </div>
                             <x-error field="shipping" />
                         </div>
@@ -169,7 +161,7 @@
                                 @if (config('app.resell'))
                                     <tr>
                                         <th style="white-space:nowrap;">Packaging Charge</th>
-                                        <td>{!! theMoney(25) !!}</td>
+                                        <td>{!! theMoney($packagingCharge) !!}</td>
                                     </tr>
                                 @endif
                                 <tr>
@@ -201,7 +193,7 @@
                         <tfoot class="checkout__totals-footer">
                             <tr>
                                 <th>Buying</th>
-                                <td>{!! theMoney(cart()->total() + (isOninda() && config('app.resell') ? 25 : 0)) !!}</td>
+                                <td>{!! theMoney(cart()->total() + (isOninda() && config('app.resell') ? $packagingCharge : 0)) !!}</td>
                             </tr>
                             @if (isOninda())
                                 <tr>
@@ -258,7 +250,7 @@
                                 @if (config('app.resell'))
                                     <tr>
                                         <th style="white-space:nowrap;font-size:14px;">Packaging Charge</th>
-                                        <td>{!! theMoney(25) !!}</td>
+                                        <td>{!! theMoney($packagingCharge) !!}</td>
                                     </tr>
                                 @endif
                                 <tr>
@@ -291,7 +283,7 @@
                             <tr>
                                 <th style="white-space:nowrap;font-size:18px;">Buying Total</th>
                                 <td style="font-size:14px;">
-                                    <span>{!! theMoney(cart()->total() + (isOninda() && config('app.resell') ? 25 : 0)) !!}</span>
+                                    <span>{!! theMoney(cart()->total() + (isOninda() && config('app.resell') ? $packagingCharge : 0)) !!}</span>
                                 </td>
                             </tr>
                             @if (isOninda())

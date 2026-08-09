@@ -62,27 +62,20 @@
                     <div class="m-0 form-group col-md-3">
                         <label class="d-block"><label>ডেলিভারি এরিয়া: <span class="text-danger">*</span></label>
                     </div>
-                    <div class="form-group col-md-9">
+                     <div class="form-group col-md-9">
                         <div class="form-control @error('shipping') is-invalid @enderror h-auto">
-                            <div class="custom-control custom-radio custom-control-inline">
-                                <input type="radio" wire:model.live="shipping"
-                                    @change="$wire.updateField('shipping', $event.target.value)"
-                                    class="custom-control-input" id="inside-dhaka" name="shipping" value="Inside Dhaka">
-                                <label class="custom-control-label" for="inside-dhaka">ঢাকা শহর
-                                    @if(cart()->subTotal()) ({{ $isFreeDelivery ? 'FREE' : $this->shippingCost('Inside Dhaka') }}
-                                    টাকা) @endif
-                                </label>
-                            </div>
-                            <div class="custom-control custom-radio custom-control-inline">
-                                <input type="radio" wire:model.live="shipping"
-                                    @change="$wire.updateField('shipping', $event.target.value)"
-                                    class="custom-control-input" id="outside-dhaka" name="shipping"
-                                    value="Outside Dhaka">
-                                <label class="custom-control-label" for="outside-dhaka">ঢাকার বাইরে
-                                    @if(cart()->subTotal()) ({{ $isFreeDelivery ? 'FREE' : $this->shippingCost('Outside Dhaka') }}
-                                    টাকা) @endif
-                                </label>
-                            </div>
+                            @foreach (app(\App\Services\DeliveryAreaService::class)->getDeliveryAreas() as $index => $area)
+                                <div class="custom-control custom-radio custom-control-inline">
+                                    <input type="radio" wire:model.live="shipping"
+                                        @change="$wire.updateField('shipping', $event.target.value)"
+                                        class="custom-control-input" id="shipping-area-{{ $index }}" name="shipping" value="{{ data_get($area, 'name') }}">
+                                    <label class="custom-control-label" for="shipping-area-{{ $index }}">
+                                        {{ data_get($area, 'name') }}
+                                        @if(cart()->subTotal()) ({{ $isFreeDelivery ? 'FREE' : $this->shippingCost(data_get($area, 'name')) }}
+                                        টাকা) @endif
+                                    </label>
+                                </div>
+                            @endforeach
                         </div>
                         <x-error field="shipping" />
                     </div>
@@ -191,7 +184,7 @@
                         @if(config('app.resell'))
                         <tr>
                             <th style="white-space:nowrap;">Packaging Charge</th>
-                            <td>{!! theMoney(25) !!}</td>
+                            <td>{!! theMoney($packagingCharge) !!}</td>
                         </tr>
                         @endif
                         <tr>
@@ -232,7 +225,7 @@
                     <tfoot class="checkout__totals-footer">
                         <tr>
                             <th>Buying</th>
-                            <td>{!! theMoney(max(cart()->total() - $coupon_discount, 0) + (isOninda() && config('app.resell') ? 25 : 0)) !!}</td>
+                            <td>{!! theMoney(max(cart()->total() - $coupon_discount, 0) + (isOninda() && config('app.resell') ? $packagingCharge : 0)) !!}</td>
                         </tr>
                         @if (isOninda())
                         <tr>
@@ -310,7 +303,7 @@
                         @if(config('app.resell'))
                         <tr>
                             <th style="white-space:nowrap;font-size:14px;">Packaging Charge</th>
-                            <td>{!! theMoney(25) !!}</td>
+                            <td>{!! theMoney($packagingCharge) !!}</td>
                         </tr>
                         @endif
                         <tr>
@@ -352,7 +345,7 @@
                         <tr>
                             <th style="white-space:nowrap;font-size:18px;">Buying Total</th>
                             <td style="font-size:14px;">
-                                <span>{!! theMoney(max(cart()->total() - $coupon_discount, 0) + (isOninda() && config('app.resell') ? 25 : 0)) !!}</span>
+                                <span>{!! theMoney(max(cart()->total() - $coupon_discount, 0) + (isOninda() && config('app.resell') ? $packagingCharge : 0)) !!}</span>
                             </td>
                         </tr>
                         @if (isOninda())
@@ -398,3 +391,28 @@
     </div>
     @endif
 </div>
+
+@script
+<script>
+    (function () {
+        function getCookie(name) {
+            var match = document.cookie.match(new RegExp('(^|;\\s*)' + name + '=([^;]*)'));
+            return match ? decodeURIComponent(match[2]) : '';
+        }
+
+        function buildFbc() {
+            var params = new URLSearchParams(window.location.search);
+            var fbclid = params.get('fbclid');
+            return fbclid ? 'fb.1.' + Date.now() + '.' + fbclid : '';
+        }
+
+        var fbp = getCookie('_fbp');
+        var fbc = getCookie('_fbc') || buildFbc();
+        var url = window.location.href;
+
+        if (fbp) { $wire.set('fbp', fbp); }
+        if (fbc) { $wire.set('fbc', fbc); }
+        $wire.set('eventSourceUrl', url);
+    })();
+</script>
+@endscript

@@ -6,13 +6,14 @@ use App\Jobs\CopyResourceToResellers;
 use App\Jobs\RemoveResourceFromResellers;
 use Illuminate\Database\Eloquent\Model;
 use RalphJSmit\Laravel\SEO\Support\HasSEO;
+use RalphJSmit\Laravel\SEO\Support\SEOData;
 
 class Category extends Model
 {
     use HasSEO;
 
     protected $fillable = [
-        'parent_id', 'image_id', 'name', 'slug', 'order', 'is_enabled',
+        'parent_id', 'image_id', 'name', 'slug', 'order', 'is_enabled', 'content',
     ];
 
     #[\Override]
@@ -51,12 +52,15 @@ class Category extends Model
      */
     private static function clearCategoryCaches($category): void
     {
+        // Clear carousel cache
+        cacheMemo()->forget('categories:carousel');
+
         // Clear nested categories cache (all variations)
         cacheMemo()->forget('categories:nested:');
-        cacheMemo()->forget('categories:nested:0');
-        cacheMemo()->forget('categories:nested:1');
+        cacheMemo()->forget('categories:nested:enabled');
+        cacheMemo()->forget('categories:nested:all');
         // Clear all possible nested cache variations
-        for ($i = 0; $i <= 10; $i++) {
+        for ($i = 0; $i <= 15; $i++) {
             cacheMemo()->forget("categories:nested:{$i}");
         }
 
@@ -75,7 +79,7 @@ class Category extends Model
             cacheMemo()->forget('api_category:'.$category->slug);
         }
         // Clear all possible nested API category cache variations
-        for ($i = 0; $i <= 10; $i++) {
+        for ($i = 0; $i <= 15; $i++) {
             cacheMemo()->forget("api_categories:nested:{$i}");
         }
 
@@ -114,10 +118,10 @@ class Category extends Model
         $count && $query->take($count);
 
         if ($count) {
-            return $query->get();
+            return cacheMemo()->rememberForever('categories:nested:'.$count, fn () => $query->get());
         }
 
-        return cacheMemo()->rememberForever('categories:nested:'.$enabledOnly, fn () => $query->get());
+        return cacheMemo()->rememberForever('categories:nested:'.($enabledOnly ? 'enabled' : 'all'), fn () => $query->get());
     }
 
     public function products()
@@ -150,5 +154,24 @@ class Category extends Model
 
         // For other fields (like 'id'), use the value as-is
         return $this->where($field, $value)->first();
+    }
+
+    /**
+     * Get dynamic SEO data fallback.
+     */
+    public function getDynamicSEOData(): SEOData
+    {
+        $title = $this->seo?->title ?: $this->name;
+        $description = $this->seo?->description;
+        $image = $this->seo?->image;
+        if (! $image && $this->image) {
+            $image = $this->image->src;
+        }
+
+        return new SEOData(
+            title: $title,
+            description: $description,
+            image: $image,
+        );
     }
 }

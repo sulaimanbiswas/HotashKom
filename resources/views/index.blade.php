@@ -1,6 +1,21 @@
 @extends('layouts.yellow.master')
 
+@section('seo_tags')
+    @if (!empty($company->seo_title))
+        <title>{{ $company->seo_title }}</title>
+        @if (!empty($company->meta_description))
+            <meta name="description" content="{{ $company->meta_description }}">
+        @endif
+    @endif
+@endsection
+
 @section('title', 'Home')
+
+@push('head')
+    @if (empty($company->seo_title) && !empty($company->meta_description))
+        <meta name="description" content="{{ $company->meta_description }}">
+    @endif
+@endpush
 
 @push('head')
   {{-- Preconnect to unpkg.com for AOS.js to reduce latency --}}
@@ -132,6 +147,15 @@
 </div>
 @endif
 
+<!-- Home Page Heading (e.g: Trusted Online Shopping in Bangladesh) -->
+@if (!empty($company->home_heading))
+    <div class="block my-4">
+        <div class="container">
+            <h1 class="text-center home-page-heading" style="font-size: 2rem; font-weight: 700; color: #3d464d; margin: 1.5rem 0;">{{ $company->home_heading }}</h1>
+        </div>
+    </div>
+@endif
+
 @if(($show_option = setting('show_option'))->brand_carousel ?? false)
 <div class="block block-products-carousel" data-layout="grid-cat">
     <div class="container">
@@ -164,9 +188,9 @@
                             </div>
                             <div class="product-card__info">
                                 <div class="product-card__name">
-                                    <h5 style="overflow: hidden;text-overflow:ellipsis; font-size: 16px; font-weight: 700;">
+                                    <h4 style="overflow: hidden;text-overflow:ellipsis; font-size: 16px; font-weight: 700;">
                                         <a href="{{ route('brands.products', $brand) }}" wire:navigate.hover title="{{$brand->name}}">{{ $brand->name }}</a>
-                                    </h5>
+                                    </h4>
                                 </div>
                             </div>
                         </div>
@@ -212,9 +236,9 @@
                             </div>
                             <div class="product-card__info">
                                 <div class="product-card__name">
-                                    <h5 style="overflow: hidden;text-overflow:ellipsis; font-size: 16px; font-weight: 700;">
+                                    <h4 style="overflow: hidden;text-overflow:ellipsis; font-size: 16px; font-weight: 700;">
                                         <a href="{{ route('categories.products', $category) }}" wire:navigate.hover title="{{$category->name}}">{{ $category->name }}</a>
-                                    </h5>
+                                    </h4>
                                 </div>
                             </div>
                         </div>

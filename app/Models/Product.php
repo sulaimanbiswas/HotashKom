@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Laravel\Scout\Searchable;
 use Nicolaslopezj\Searchable\SearchableTrait;
 use RalphJSmit\Laravel\SEO\Support\HasSEO;
+use RalphJSmit\Laravel\SEO\Support\SEOData;
 
 class Product extends Model
 {
@@ -24,11 +25,12 @@ class Product extends Model
     use Searchable;
     // use SearchableTrait;
 
-    protected $with = ['images'];
+    protected $with = ['thumbnail'];
 
     protected $fillable = [
         'brand_id', 'name', 'slug', 'description', 'short_description', 'price', 'average_purchase_price', 'selling_price', 'suggested_price', 'wholesale', 'sku',
-        'source_id', 'should_track', 'stock_count', 'desc_img', 'desc_img_pos', 'is_active', 'hot_sale', 'new_arrival', 'shipping_inside', 'shipping_outside', 'delivery_text',
+        'source_id', 'should_track', 'stock_count', 'desc_img', 'desc_img_pos', 'is_active', 'hot_sale', 'new_arrival', 'shipping_inside', 'shipping_outside', 'delivery_charges', 'delivery_text',
+        'packaging_charge',
     ];
 
     /**
@@ -132,6 +134,7 @@ class Product extends Model
         // Clear API-related caches
         cacheInvalidateNamespace('api_sections');
         cacheInvalidateNamespace('product_filters');
+        cacheInvalidateNamespace('section_products');
 
         // Clear admin dashboard caches
         cacheMemo()->forget('admin_products_count');
@@ -156,7 +159,7 @@ class Product extends Model
             }
 
             $parentName = $this->parent?->name;
-            if (!$parentName) {
+            if (! $parentName) {
                 $parent = Product::withoutGlobalScopes()->find($this->parent_id);
                 $parentName = $parent?->name;
             }
@@ -239,6 +242,20 @@ class Product extends Model
             ->withPivot(['img_type', 'order'])
             ->orderBy('order')
             ->withTimestamps();
+    }
+
+    /**
+     * Only the single base/thumbnail image — used on listing cards.
+     * Keeps memory and query payload small on all product listing pages.
+     */
+    public function thumbnail()
+    {
+        return $this->belongsToMany(Image::class)
+            ->withPivot(['img_type', 'order'])
+            ->wherePivot('img_type', 'base')
+            ->orderBy('order')
+            ->withTimestamps()
+            ->limit(1);
     }
 
     public function parent()
@@ -359,9 +376,24 @@ class Product extends Model
     protected function baseImage(): Attribute
     {
         return Attribute::make(get: function () {
-            $images = $this->images ?? collect();
+            // Use pre-loaded thumbnail relation if available (listing pages)
+            if ($this->relationLoaded('thumbnail') && $this->thumbnail->isNotEmpty()) {
+                return $this->thumbnail->first();
+            }
+
+            // If we are a variation and have no thumbnail, fall back to parent's thumbnail
+            if ($this->parent_id) {
+                $parent = $this->relationLoaded('parent') ? $this->parent : $this->parent()->first();
+                if ($parent && $parent->relationLoaded('thumbnail') && $parent->thumbnail->isNotEmpty()) {
+                    return $parent->thumbnail->first();
+                }
+            }
+
+            // Fall back to filtering from fully-loaded images (product detail page)
+            $images = $this->relationLoaded('images') ? $this->images : collect();
             if ($images->isEmpty()) {
-                $images = $this->parent->images ?? collect();
+                $parent = $this->relationLoaded('parent') ? $this->parent : ($this->parent_id ? $this->parent()->first() : null);
+                $images = $parent?->relationLoaded('images') ? ($parent->images ?? collect()) : collect();
             }
 
             return $images->first(fn (Image $image): bool => $image->pivot->img_type == 'base');
@@ -371,9 +403,10 @@ class Product extends Model
     protected function additionalImages(): Attribute
     {
         return Attribute::make(get: function () {
-            $images = $this->images ?? collect();
+            // Only available when full images relation is loaded (e.g. product detail page)
+            $images = $this->relationLoaded('images') ? $this->images : collect();
             if ($images->isEmpty()) {
-                $images = $this->parent->images ?? collect();
+                $images = $this->parent?->relationLoaded('images') ? ($this->parent->images ?? collect()) : collect();
             }
 
             return $images->filter(fn (Image $image): bool => $image->pivot->img_type == 'additional');
@@ -449,6 +482,7 @@ class Product extends Model
             'hot_sale' => 'boolean',
             'new_arrival' => 'boolean',
             'should_track' => 'boolean',
+            'delivery_charges' => 'array',
         ];
     }
 
@@ -458,5 +492,33 @@ class Product extends Model
     public function reviews(): MorphMany
     {
         return $this->morphMany(Review::class, 'reviewable');
+    }
+
+    /**
+     * Get dynamic SEO data fallback.
+     */
+    public function getDynamicSEOData(): SEOData
+    {
+        $title = $this->seo?->title ?: $this->name;
+
+        $description = $this->seo?->description;
+        if (! $description) {
+            $description = $this->short_description ?: $this->description;
+            if ($description) {
+                $description = strip_tags($description);
+                $description = (string) str($description)->limit(160);
+            }
+        }
+
+        $image = $this->seo?->image;
+        if (! $image && $this->base_image) {
+            $image = $this->base_image->src;
+        }
+
+        return new SEOData(
+            title: $title,
+            description: $description,
+            image: $image,
+        );
     }
 }

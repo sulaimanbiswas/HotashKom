@@ -1,4 +1,18 @@
-@if ($metaPixel->isEnabled())
+@if ($metaPixel->isEnabled() || !empty(setting('pixel_ids')) || !empty(setting('meta_pixel')))
+    @php
+        $dbPixelIds = preg_split('/[\s\r\n,]+/', (string) setting('pixel_ids', '')) ?: [];
+        $rawPixelConfig = setting('meta_pixel') ?: config('meta-pixel.meta_pixel');
+        $configPixelIds = collect(preg_split('/[\r\n|]+/', (string) $rawPixelConfig))
+            ->map(fn($p) => explode(':', trim($p))[0])
+            ->filter()
+            ->all();
+
+        $metaPixelIds = collect(array_merge($dbPixelIds, $configPixelIds))
+            ->map(fn($id) => trim($id))
+            ->filter()
+            ->unique()
+            ->values();
+    @endphp
     <!-- Meta Pixel Code -->
     <script>
         ! function(f, b, e, v, n, t, s) {
@@ -19,34 +33,21 @@
             s.parentNode.insertBefore(t, s)
         }(window, document, 'script',
             'https://connect.facebook.net/en_US/fbevents.js');
-        @if (false)
-            @if ($user = $metaPixel->getUser())
-                @if ($userIdAsString)
-                    fbq('init', '{{ $metaPixel->pixelId() }}', {
-                        em: '{{ $user['em'] }}',
-                        external_id: '{{ $user['external_id'] }}'
-                    });
-                @else
-                    fbq('init', '{{ $metaPixel->pixelId() }}', {
-                        em: '{{ $user['em'] }}',
-                        external_id: {{ $user['external_id'] }}
-                    });
-                @endif
-            @else
-                fbq('init', '{{ $metaPixel->pixelId() }}');
-            @endif
+        @if($user = $metaPixel->getUser())
+            @foreach ($metaPixelIds as $id)
+                fbq('init', '{{ $id }}', {{ Js::from($user) }});
+            @endforeach
         @else
-            @foreach (explode(' ', $metaPixel->pixelId()) as $id)
-                @if ($id)
-                    fbq('init', '{{ $id }}');
-                @endif
+            @foreach ($metaPixelIds as $id)
+                fbq('init', '{{ $id }}');
             @endforeach
         @endif
-        fbq('track', 'PageView');
     </script>
     <noscript>
-        <img height="1" width="1" style="display:none"
-            src="https://www.facebook.com/tr?id={{ $metaPixel->pixelId() }}&ev=PageView&noscript=1" />
+        @foreach ($metaPixelIds as $id)
+            <img height="1" width="1" style="display:none"
+                src="https://www.facebook.com/tr?id={{ $id }}&ev=PageView&noscript=1" />
+        @endforeach
     </noscript>
     <!-- End Meta Pixel Code -->
 @endif

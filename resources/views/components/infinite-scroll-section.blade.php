@@ -42,10 +42,10 @@
             <div class="container">
                 @if ($section->title ?? null)
                     <div class="block-header">
-                        <h3 class="block-header__title" style="padding: 0.375rem 1rem;">
+                        <h1 class="block-header__title" style="padding: 0.375rem 1rem;">
                             <a href="{{ route('home-sections.products', $section) }}"
                                 wire:navigate.hover>{{ $section->title }}</a>
-                        </h3>
+                        </h1>
                         <div class="block-header__divider"></div>
                         <a href="{{ route('products.index', ['filter_section' => $section->id]) }}"
                             class="ml-3 btn btn-sm btn-all" wire:navigate.hover>
@@ -303,6 +303,7 @@
 
                 return `
                          <div class="product-card" data-id="${productId}" data-max="${product.should_track ? (product.stock_count || 0) : -1}">
+                             ${product.free_delivery ? '<div class="product-card__ribbon"><span class="badge badge--free-delivery">Free Delivery</span></div>' : ''}
                              <div class="product-card__badges-list">
                                 ${!inStock ? '<div class="product-card__badge product-card__badge--sale">Sold</div>' : ''}
                                 ${discountText ? `<div class="product-card__badge product-card__badge--sale">${discountText}</div>` : ''}

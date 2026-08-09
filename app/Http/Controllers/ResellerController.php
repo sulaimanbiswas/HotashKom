@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 final class ResellerController extends Controller
 {
@@ -99,12 +100,14 @@ final class ResellerController extends Controller
 
     private function processCheckout(Request $request, $user)
     {
+        $deliveryAreas = collect(setting('delivery_areas') ?? [])->pluck('name')->toArray();
+
         // Validate the request
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'regex:/^1\d{9}$/'],
             'address' => ['required', 'string'],
-            'shipping' => ['required', 'in:Inside Dhaka,Outside Dhaka'],
+            'shipping' => ['required', Rule::in($deliveryAreas)],
             'note' => ['nullable', 'string'],
         ]);
 
@@ -292,33 +295,95 @@ final class ResellerController extends Controller
     {
         if ($request->ajax()) {
             $user = Auth::guard('user')->user();
-            $transactions = $user->wallet->transactions()->latest()->paginate(50);
 
-            return response()->json([
-                'draw' => $request->draw,
-                'recordsTotal' => $transactions->total(),
-                'recordsFiltered' => $transactions->total(),
-                'data' => $transactions->map(fn ($transaction, $index): array => [
-                    'DT_RowIndex' => $index + 1,
+            $page = (int) ($request->input('start', 0) / max((int) $request->input('length', 50), 1)) + 1;
+            $perPage = (int) $request->input('length', 50);
+            $transactions = $user->wallet->transactions()->latest()->paginate($perPage, ['*'], 'page', $page);
+
+            // Pre-load orders for the current page transactions in 1 query
+            $orderIds = [];
+            foreach ($transactions as $transaction) {
+                $orderId = $transaction->meta['order_id'] ?? null;
+                if ($orderId) {
+                    $orderIds[] = (int) $orderId;
+                }
+            }
+            $orders = Order::whereIn('id', array_unique($orderIds))->get()->keyBy('id');
+
+            $loadOrder = function (int $orderId) use ($orders): ?Order {
+                return $orders->get($orderId);
+            };
+
+            $startIndex = ($transactions->currentPage() - 1) * $transactions->perPage();
+
+            $data = $transactions->values()->map(function ($transaction, $index) use ($loadOrder, $startIndex): array {
+                $meta = $transaction->meta;
+                $orderId = $meta['order_id'] ?? null;
+                $order = $orderId ? $loadOrder((int) $orderId) : null;
+
+                if (isset($meta['trx_id']) && isset($meta['admin_id'])) {
+                    $metaHtml = '<span class="text-muted">Trx ID: '.e($meta['trx_id']).' by staff #'.e($meta['admin_id']).'</span>';
+                } else {
+                    $title = $meta['reason'] ?? 'N/A';
+                    $metaHtml = $orderId
+                        ? '<a target="_blank" href="'.route('reseller.orders.show', $orderId).'">'.e($title).'</a>'
+                        : e($title);
+                }
+
+                $subtotalHtml = '-';
+                $deliveryHtml = '-';
+                $advancedHtml = '-';
+                $packagingHtml = '-';
+                $totalHtml = '-';
+
+                if ($order) {
+                    $sellSubtotalVal = collect((array) $order->products)->sum(
+                        fn ($p) => (float) ($p->retail_price ?? $p->price ?? 0) * (int) ($p->quantity ?? 0)
+                    );
+                    $buySubtotalVal = (int) ($order->data['subtotal'] ?? 0);
+                    $buyDeliveryVal = (int) ($order->data['shipping_cost'] ?? 0);
+                    $sellDeliveryVal = (int) ($order->data['retail_delivery_fee'] ?? $order->data['shipping_cost'] ?? 0);
+                    $advancedVal = (int) ($order->data['advanced'] ?? 0);
+                    $packagingVal = (int) ($order->data['packaging_charge'] ?? 0);
+
+                    $buySubtotal = number_format($buySubtotalVal);
+                    $sellSubtotal = number_format((int) $sellSubtotalVal);
+                    $subtotalHtml = '<span style="white-space:nowrap"><small class="text-muted">Buy</small> '.$buySubtotal.'</span><br><span style="white-space:nowrap"><small class="text-muted">Sell</small> '.$sellSubtotal.'</span>';
+
+                    $buyDelivery = number_format($buyDeliveryVal);
+                    $sellDelivery = number_format($sellDeliveryVal);
+                    $deliveryHtml = '<span style="white-space:nowrap"><small class="text-muted">Buy</small> '.$buyDelivery.'</span><br><span style="white-space:nowrap"><small class="text-muted">Sell</small> '.$sellDelivery.'</span>';
+
+                    $advancedHtml = '-<br>'.number_format($advancedVal);
+                    $packagingHtml = number_format($packagingVal).'<br>-';
+
+                    $buyTotal = number_format($buySubtotalVal + $buyDeliveryVal + $packagingVal);
+                    $sellTotal = number_format((int) $sellSubtotalVal + $sellDeliveryVal - $advancedVal);
+                    $totalHtml = '<span style="white-space:nowrap"><small class="text-muted">Buy</small> '.$buyTotal.'</span><br><span style="white-space:nowrap"><small class="text-muted">Sell</small> '.$sellTotal.'</span>';
+                }
+
+                return [
+                    'DT_RowIndex' => $startIndex + $index + 1,
                     'type' => $transaction->type === 'deposit'
                         ? '<span class="badge badge-success">Deposit</span>'
                         : '<span class="badge badge-danger">Withdraw</span>',
                     'amount' => number_format((float) $transaction->amount, 2).' tk',
                     'created_at' => $transaction->created_at->format('d-M-Y H:i'),
                     'status' => $transaction->confirmed ? 'COMPLETED' : 'PENDING',
-                    'meta' => (function ($meta) {
-                        if (isset($meta['trx_id']) && isset($meta['admin_id'])) {
-                            return '<span class="text-muted">Trx ID: '.e($meta['trx_id']).' by staff #'.e($meta['admin_id']).'</span>';
-                        }
+                    'meta' => $metaHtml,
+                    'subtotal' => $subtotalHtml,
+                    'delivery_charge' => $deliveryHtml,
+                    'advanced' => $advancedHtml,
+                    'packaging_charge' => $packagingHtml,
+                    'total' => $totalHtml,
+                ];
+            });
 
-                        $title = $meta['reason'] ?? 'N/A';
-                        if ($id = $meta['order_id'] ?? false) {
-                            return '<a target="_blank" href="'.route('reseller.orders.show', $id).'">'.e($title).'</a>';
-                        }
-
-                        return e($title);
-                    })($transaction->meta),
-                ]),
+            return response()->json([
+                'draw' => $request->draw,
+                'recordsTotal' => $transactions->total(),
+                'recordsFiltered' => $transactions->total(),
+                'data' => $data,
             ]);
         }
 
@@ -343,15 +408,38 @@ final class ResellerController extends Controller
             'address' => ['nullable', 'string', 'max:500'],
             'domain' => 'nullable|string|max:255|unique:users,domain,'.$user->id,
             'logo' => ['nullable', 'image', 'mimes:jpeg,png,jpg,gif', 'max:2048'],
-            'inside_dhaka_shipping' => ['nullable', 'integer', 'min:0', 'max:999999'],
-            'outside_dhaka_shipping' => ['nullable', 'integer', 'min:0', 'max:999999'],
+            'reseller_delivery_areas' => ['nullable', 'array'],
+            'reseller_delivery_areas.*.name' => ['required', 'string'],
+            'reseller_delivery_areas.*.cost' => ['required', 'integer', 'min:0', 'max:999999'],
         ]);
 
         $user->fill($request->only([
             'name', 'shop_name', 'email', 'phone_number',
             'bkash_number', 'address', 'domain',
-            'inside_dhaka_shipping', 'outside_dhaka_shipping',
         ]));
+
+        $resellerAreas = $request->input('reseller_delivery_areas', []);
+        $formattedAreas = [];
+        foreach ($resellerAreas as $area) {
+            $formattedAreas[] = [
+                'name' => data_get($area, 'name'),
+                'cost' => $area['cost'] !== null && $area['cost'] !== '' ? (int) $area['cost'] : 0,
+            ];
+        }
+        $user->delivery_areas = $formattedAreas;
+
+        // Reconstruct inside_dhaka_shipping and outside_dhaka_shipping for backwards compatibility
+        $insideAreaSetting = collect($formattedAreas)->first(fn ($a) => Str::contains(Str::lower(data_get($a, 'name') ?? ''), 'inside') ||
+            Str::contains(Str::lower(data_get($a, 'name') ?? ''), 'ঢাকা শহর') ||
+            Str::contains(Str::lower(data_get($a, 'name') ?? ''), 'ঢাকা সিটি')
+        ) ?? collect($formattedAreas)->first();
+
+        $outsideAreaSetting = collect($formattedAreas)->first(fn ($a) => Str::contains(Str::lower(data_get($a, 'name') ?? ''), 'outside') ||
+            Str::contains(Str::lower(data_get($a, 'name') ?? ''), 'বাহির')
+        );
+
+        $user->inside_dhaka_shipping = $insideAreaSetting ? (int) data_get($insideAreaSetting, 'cost', 0) : 0;
+        $user->outside_dhaka_shipping = $outsideAreaSetting ? (int) data_get($outsideAreaSetting, 'cost', 0) : ($formattedAreas[1] ?? $insideAreaSetting ? (int) data_get($formattedAreas[1] ?? $insideAreaSetting, 'cost', 0) : 0);
 
         if ($request->hasFile('logo')) {
             // Delete old logo if exists

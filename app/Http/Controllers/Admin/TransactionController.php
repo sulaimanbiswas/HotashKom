@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\Order;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -18,9 +19,28 @@ class TransactionController extends Controller
     public function index(Request $request, User $user)
     {
         if ($request->ajax()) {
-            $transactions = $user->wallet->transactions();
+            $query = $user->wallet->transactions();
 
-            return DataTables::of($transactions)
+            $dataTable = DataTables::of($query);
+
+            // Force prepare and fetch only the paginated results for this request
+            $transactions = $dataTable->prepareQuery()->results();
+
+            // Pre-load orders for the current page transactions in 1 query
+            $orderIds = [];
+            foreach ($transactions as $transaction) {
+                $orderId = $transaction->meta['order_id'] ?? null;
+                if ($orderId) {
+                    $orderIds[] = (int) $orderId;
+                }
+            }
+            $orders = Order::whereIn('id', array_unique($orderIds))->get()->keyBy('id');
+
+            $loadOrder = function (int $orderId) use ($orders): ?Order {
+                return $orders->get($orderId);
+            };
+
+            return $dataTable
                 ->addIndexColumn()
                 ->editColumn('type', fn ($row): string => $row->type === 'deposit' ?
                     '<span class="badge badge-success">Deposit</span>' :
@@ -48,6 +68,85 @@ class TransactionController extends Controller
 
                     return $title;
                 })
+                ->addColumn('subtotal', function ($row) use ($loadOrder) {
+                    $orderId = $row->meta['order_id'] ?? null;
+                    if (! $orderId) {
+                        return '-';
+                    }
+                    $order = $loadOrder((int) $orderId);
+                    if (! $order) {
+                        return '-';
+                    }
+                    $buy = number_format((int) ($order->data['subtotal'] ?? 0));
+                    $sell = number_format((int) collect((array) $order->products)->sum(
+                        fn ($p) => (float) ($p->retail_price ?? $p->price ?? 0) * (int) ($p->quantity ?? 0)
+                    ));
+
+                    return '<span style="white-space:nowrap"><small class="text-muted">Buy</small> '.$buy.'</span><br><span style="white-space:nowrap"><small class="text-muted">Sell</small> '.$sell.'</span>';
+                })
+                ->addColumn('delivery_charge', function ($row) use ($loadOrder) {
+                    $orderId = $row->meta['order_id'] ?? null;
+                    if (! $orderId) {
+                        return '-';
+                    }
+                    $order = $loadOrder((int) $orderId);
+                    if (! $order) {
+                        return '-';
+                    }
+                    $buy = number_format((int) ($order->data['shipping_cost'] ?? 0));
+                    $sell = number_format((int) ($order->data['retail_delivery_fee'] ?? $order->data['shipping_cost'] ?? 0));
+
+                    return '<span style="white-space:nowrap"><small class="text-muted">Buy</small> '.$buy.'</span><br><span style="white-space:nowrap"><small class="text-muted">Sell</small> '.$sell.'</span>';
+                })
+                ->addColumn('advanced', function ($row) use ($loadOrder) {
+                    $orderId = $row->meta['order_id'] ?? null;
+                    if (! $orderId) {
+                        return '-';
+                    }
+                    $order = $loadOrder((int) $orderId);
+                    if (! $order) {
+                        return '-';
+                    }
+                    $amount = number_format((int) ($order->data['advanced'] ?? 0));
+
+                    return '-<br>'.$amount;
+                })
+                ->addColumn('packaging_charge', function ($row) use ($loadOrder) {
+                    $orderId = $row->meta['order_id'] ?? null;
+                    if (! $orderId) {
+                        return '-';
+                    }
+                    $order = $loadOrder((int) $orderId);
+                    if (! $order) {
+                        return '-';
+                    }
+                    $amount = number_format((int) ($order->data['packaging_charge'] ?? 0));
+
+                    return $amount.'<br>-';
+                })
+                ->addColumn('total', function ($row) use ($loadOrder) {
+                    $orderId = $row->meta['order_id'] ?? null;
+                    if (! $orderId) {
+                        return '-';
+                    }
+                    $order = $loadOrder((int) $orderId);
+                    if (! $order) {
+                        return '-';
+                    }
+                    $buySubtotal = (int) ($order->data['subtotal'] ?? 0);
+                    $buyDelivery = (int) ($order->data['shipping_cost'] ?? 0);
+                    $packaging = (int) ($order->data['packaging_charge'] ?? 0);
+                    $sellSubtotal = (int) collect((array) $order->products)->sum(
+                        fn ($p) => (float) ($p->retail_price ?? $p->price ?? 0) * (int) ($p->quantity ?? 0)
+                    );
+                    $sellDelivery = (int) ($order->data['retail_delivery_fee'] ?? $order->data['shipping_cost'] ?? 0);
+                    $advanced = (int) ($order->data['advanced'] ?? 0);
+
+                    $buyTotal = number_format($buySubtotal + $buyDelivery + $packaging);
+                    $sellTotal = number_format($sellSubtotal + $sellDelivery - $advanced);
+
+                    return '<span style="white-space:nowrap"><small class="text-muted">Buy</small> '.$buyTotal.'</span><br><span style="white-space:nowrap"><small class="text-muted">Sell</small> '.$sellTotal.'</span>';
+                })
                 ->addColumn('actions', function ($row) {
                     if (! $row->confirmed && $row->type === 'withdraw') {
                         return '<div class="btn-group">
@@ -58,7 +157,7 @@ class TransactionController extends Controller
 
                     return '';
                 })
-                ->rawColumns(['type', 'meta', 'status', 'actions'])
+                ->rawColumns(['type', 'meta', 'status', 'subtotal', 'delivery_charge', 'advanced', 'packaging_charge', 'total', 'actions'])
                 ->make(true);
         }
 

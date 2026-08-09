@@ -11,14 +11,20 @@ use App\Models\Order;
 use App\Models\Page;
 use App\Models\Product;
 use App\Models\Setting;
-use App\Models\Slide;
 use App\Models\User;
+use App\Services\DeliveryAreaService;
+use App\Services\FacebookPixelService;
+use App\Traits\ResolvesPackagingCharge;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class StorefrontController extends Controller
 {
+    use ResolvesPackagingCharge;
+
     /**
      * GET /api/storefront/settings
      * Returns site settings needed by the frontend (company info, delivery charges, etc.)
@@ -26,7 +32,9 @@ class StorefrontController extends Controller
     public function settings(): JsonResponse
     {
         $keys = ['company', 'logo', 'social', 'delivery_charge', 'free_delivery', 'scroll_text', 'call_for_order', 'gtm_id', 'pixel_ids'];
-        $settings = Setting::whereIn('name', $keys)->get(['name', 'value'])->pluck('value', 'name');
+        $settingsArray = Setting::array();
+        $settings = collect($settingsArray)->only($keys)->toArray();
+        $settings['pixel_ids'] = implode(' ', app(FacebookPixelService::class)->getPixelIds());
 
         return response()->json([
             'data' => $settings,
@@ -39,7 +47,7 @@ class StorefrontController extends Controller
      */
     public function slides(): JsonResponse
     {
-        $slides = Slide::whereIsActive(1)->get()->map(fn ($slide) => [
+        $slides = slides()->map(fn ($slide) => [
             'id' => $slide->id,
             'title' => $slide->title,
             'text' => $slide->text,
@@ -238,8 +246,9 @@ class StorefrontController extends Controller
                 'description' => str_replace('../../../storage', url('/storage'), $product->description ?? ''),
                 'shortDescription' => $product->short_description ?? '',
                 'deliveryText' => $deliveryText,
-                'shippingInside' => (int) ($deliveryCharge->inside_dhaka ?? 80),
-                'shippingOutside' => (int) ($deliveryCharge->outside_dhaka ?? 150),
+                'deliveryAreas' => app(DeliveryAreaService::class)->getProductDeliveryCharges($product)->toArray(),
+                'shippingInside' => (int) (data_get(app(DeliveryAreaService::class)->getInsideArea(), 'cost') ?? 70),
+                'shippingOutside' => (int) (data_get(app(DeliveryAreaService::class)->getOutsideArea(), 'cost') ?? 120),
                 'attributes' => $attributes,
                 'variations' => $variations,
                 'hasVariations' => $product->variations->isNotEmpty(),
@@ -283,22 +292,22 @@ class StorefrontController extends Controller
      */
     public function checkout(Request $request): JsonResponse
     {
+        $deliveryAreas = collect(setting('delivery_areas') ?? [])->pluck('name')->toArray();
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'phone' => ['required', 'string'],
             'address' => ['required', 'string', 'max:500'],
             'note' => ['nullable', 'string', 'max:1000'],
-            'shipping' => ['required', 'in:Inside Dhaka,Outside Dhaka'],
+            'shipping' => ['required', Rule::in($deliveryAreas)],
             'items' => ['required', 'array', 'min:1'],
             'items.*.id' => ['required'],
             'items.*.quantity' => ['required', 'integer', 'min:1'],
             'items.*.variation_id' => ['nullable'],
         ]);
 
-        $deliveryCharge = setting('delivery_charge');
-        $shippingCost = $data['shipping'] === 'Inside Dhaka'
-            ? (float) ($deliveryCharge->inside_dhaka ?? 80)
-            : (float) ($deliveryCharge->outside_dhaka ?? 150);
+        $areaSetting = collect(setting('delivery_areas') ?? [])->firstWhere('name', $data['shipping']);
+        $shippingCost = (float) ($areaSetting['cost'] ?? 0);
 
         // Build products JSON. Prefer the requested variation when supplied so the
         // ordered line item matches what the customer picked in the UI.
@@ -413,7 +422,7 @@ class StorefrontController extends Controller
                 'city_id' => '',
                 'area_id' => '',
                 'weight' => 0.5,
-                'packaging_charge' => 25,
+                'packaging_charge' => $this->resolvePackagingCharge(array_keys($orderProducts)),
                 'is_fraud' => $isFraud,
                 'is_repeat' => $isRepeat,
                 'shipping_area' => $data['shipping'],
@@ -426,8 +435,40 @@ class StorefrontController extends Controller
             ],
         ]);
 
-        if ($admin) {
-            $admin->update(['last_order_received_at' => now()]);
+        if (setting('meta_pixel') || config('meta-pixel.meta_pixel') || setting('pixel_ids')) {
+            $facebookProducts = [];
+            foreach ($orderProducts as $productItem) {
+                $facebookProducts[] = [
+                    'id' => (string) ($productItem->id ?? ''),
+                    'name' => $productItem->name ?? '',
+                    'price' => (float) ($productItem->price ?? 0),
+                    'quantity' => (int) ($productItem->quantity ?? 1),
+                ];
+            }
+
+            $orderPayload = [
+                'id' => $order->id,
+                'total' => (float) $subtotal,
+            ];
+
+            $userDataArr = [
+                'name' => $order->name,
+                'email' => $order->email ?? '',
+                'phone' => $order->phone,
+                'external_id' => $order->user_id,
+            ];
+
+            $orderTrackingData = [];
+            $eventName = config('meta-pixel.advanced_tracking') ? 'Lead' : 'Purchase';
+            $orderTrackingData['event_id'] = 'ch_'.strtolower($eventName).'_'.$order->id.'_'.time();
+            $order->update(['tracking' => $orderTrackingData]);
+
+            $facebookService = app(FacebookPixelService::class);
+            if (config('meta-pixel.advanced_tracking')) {
+                $facebookService->trackLead($orderPayload, $facebookProducts, $userDataArr, null, $orderTrackingData);
+            } else {
+                $facebookService->trackPurchase($orderPayload, $facebookProducts, $userDataArr, null, $orderTrackingData);
+            }
         }
 
         return response()->json([
@@ -718,7 +759,7 @@ class StorefrontController extends Controller
      */
     public function saveCheckoutProgress(Request $request): JsonResponse
     {
-        if (empty($request->all()) && !empty($request->getContent())) {
+        if (empty($request->all()) && ! empty($request->getContent())) {
             $json = json_decode($request->getContent(), true);
             if (is_array($json)) {
                 $request->merge($json);
@@ -750,7 +791,7 @@ class StorefrontController extends Controller
         $items = $data['items'];
         $cartContent = collect();
 
-        if (!empty($items)) {
+        if (! empty($items)) {
             $variationIds = collect($items)->pluck('variation_id')->filter()->unique()->toArray();
             $productIds = collect($items)->pluck('id')->filter()->unique()->toArray();
 
@@ -773,7 +814,7 @@ class StorefrontController extends Controller
 
                 $price = $product->selling_price;
                 $slug = $product->slug;
-                
+
                 // Base image resolution
                 $imageSrc = '';
                 if ($product->base_image) {
@@ -787,13 +828,13 @@ class StorefrontController extends Controller
                 }
 
                 // Construct a stdClass to match Azmolla/Shoppingcart CartItem fields
-                $cartItem = new \stdClass();
+                $cartItem = new \stdClass;
                 $cartItem->id = $product->id;
                 $cartItem->name = $product->varName; // Uses Parent [Variation] name
                 $cartItem->qty = $item['quantity'];
                 $cartItem->price = $price;
-                
-                $options = new \stdClass();
+
+                $options = new \stdClass;
                 $options->slug = $slug;
                 $options->image = $imageSrc;
                 $cartItem->options = $options;
@@ -806,10 +847,10 @@ class StorefrontController extends Controller
             return response()->json(['message' => 'Cart is empty.'], 400);
         }
 
-        $identifier = 'api_' . str_replace('+', '', $phone);
+        $identifier = 'api_'.str_replace('+', '', $phone);
         $instance = 'default';
 
-        \Illuminate\Support\Facades\DB::table('shopping_cart')->updateOrInsert(
+        DB::table('shopping_cart')->updateOrInsert(
             [
                 'identifier' => $identifier,
                 'instance' => $instance,
@@ -824,7 +865,7 @@ class StorefrontController extends Controller
         );
 
         // Clean up any other carts with the same phone number to avoid duplicates
-        \Illuminate\Support\Facades\DB::table('shopping_cart')
+        DB::table('shopping_cart')
             ->where('phone', $phone)
             ->where('instance', $instance)
             ->where('identifier', '!=', $identifier)

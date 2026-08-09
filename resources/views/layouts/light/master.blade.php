@@ -11,7 +11,7 @@
 
     @php
         $jqueryJs = cdnAsset('jquery-3.5.1', 'assets/js/jquery-3.5.1.min.js');
-        $fontawesomeCss = cdnAsset('fontawesome.css', 'assets/css/fontawesome.css');
+        $fontawesomeCss = cdnAsset('fontawesome.css', 'https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css');
     @endphp
 
     @include('layouts.partials.cdn-fallback', [
@@ -169,8 +169,33 @@
     @stack('styles')
     @bukStyles(true)
     @livewireStyles
+    @if(config('googletagmanager.id'))
+        @php
+            try {
+                echo view('googletagmanager::head')->render();
+                $gtmEnabled = true;
+            } catch (\Exception $e) {
+                $gtmEnabled = false;
+            }
+        @endphp
+    @endif
+    @if(session('datalayer_events'))
+        <script>
+            window.dataLayer = window.dataLayer || [];
+            @foreach(session('datalayer_events') as $dlEvent)
+                window.dataLayer.push({{ Js::from($dlEvent) }});
+            @endforeach
+        </script>
+    @endif
   </head>
   <body class="light-only" main-theme-layout="ltr">
+    @if(isset($gtmEnabled) && $gtmEnabled)
+        @php
+            try {
+                echo view('googletagmanager::body')->render();
+            } catch (\Exception $e) {}
+        @endphp
+    @endif
     @php $admin = auth('admin')->user() @endphp
     <!-- Loader starts-->
     <div class="loader-wrapper">

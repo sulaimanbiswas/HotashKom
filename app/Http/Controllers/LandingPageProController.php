@@ -10,6 +10,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
 use App\Notifications\User\OrderPlaced;
+use App\Services\FacebookPixelService;
 use App\Services\LandingPageProTemplateRegistry;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -297,7 +298,7 @@ class LandingPageProController extends Controller
             'name' => ['required', 'string'],
             'phone' => ['required', 'string'],
             'address' => ['required', 'string'],
-            'delivery_area' => ['required', 'in:inside,outside'],
+            'delivery_area' => ['required', 'string'],
             'items' => ['required', 'array', 'min:1'],
             'items.*.landing_product_id' => ['required', 'integer'],
             'items.*.product_id' => ['required', 'exists:products,id'],
@@ -315,7 +316,14 @@ class LandingPageProController extends Controller
             ], 422);
         }
 
-        $shippingArea = $validated['delivery_area'] === 'outside' ? 'Outside Dhaka' : 'Inside Dhaka';
+        $rawDeliveryArea = (string) $validated['delivery_area'];
+        if ($rawDeliveryArea === 'inside') {
+            $shippingArea = 'Inside Dhaka';
+        } elseif ($rawDeliveryArea === 'outside') {
+            $shippingArea = 'Outside Dhaka';
+        } else {
+            $shippingArea = $rawDeliveryArea;
+        }
 
         $fraud = setting('fraud');
 
@@ -467,6 +475,44 @@ class LandingPageProController extends Controller
             return response()->json([
                 'message' => 'All selected products are unavailable.',
             ], 422);
+        }
+
+        if (setting('meta_pixel') || config('meta-pixel.meta_pixel') || setting('pixel_ids')) {
+            $facebookProducts = [];
+            foreach ($productsPayload as $item) {
+                $facebookProducts[] = [
+                    'id' => (string) ($item['id'] ?? ''),
+                    'name' => $item['name'] ?? '',
+                    'price' => (float) ($item['price'] ?? 0),
+                    'quantity' => (int) ($item['quantity'] ?? 1),
+                ];
+            }
+
+            $orderPayload = [
+                'id' => $order->id,
+                'total' => (float) ($order->data['subtotal'] ?? 0),
+            ];
+
+            $userDataArr = [
+                'name' => $order->name,
+                'email' => $order->email ?? '',
+                'phone' => $order->phone,
+                'external_id' => $order->user_id,
+            ];
+
+            $orderTrackingData = $order->tracking ?? [];
+            $eventName = config('meta-pixel.advanced_tracking') ? 'Lead' : 'Purchase';
+            $orderTrackingData['event_id'] = 'ch_'.strtolower($eventName).'_'.$order->id.'_'.time();
+
+            $order->update(['tracking' => $orderTrackingData]);
+
+            $facebookService = app(FacebookPixelService::class);
+
+            if (config('meta-pixel.advanced_tracking')) {
+                $facebookService->trackLead($orderPayload, $facebookProducts, $userDataArr, null, $orderTrackingData);
+            } else {
+                $facebookService->trackPurchase($orderPayload, $facebookProducts, $userDataArr, null, $orderTrackingData);
+            }
         }
 
         return response()->json([

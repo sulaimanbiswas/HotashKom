@@ -7,6 +7,7 @@ use App\Jobs\RemoveResourceFromResellers;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use RalphJSmit\Laravel\SEO\Support\HasSEO;
+use RalphJSmit\Laravel\SEO\Support\SEOData;
 
 class Brand extends Model
 {
@@ -14,7 +15,7 @@ class Brand extends Model
     use HasSEO;
 
     protected $fillable = [
-        'image_id', 'name', 'slug', 'is_enabled',
+        'image_id', 'name', 'slug', 'is_enabled', 'content',
     ];
 
     #[\Override]
@@ -52,6 +53,9 @@ class Brand extends Model
      */
     private static function clearBrandCaches(): void
     {
+        // Clear carousel cache
+        cacheMemo()->forget('brands:carousel');
+
         // Clear brands cache
         cacheMemo()->forget('brands');
 
@@ -102,5 +106,24 @@ class Brand extends Model
 
         // For other fields (like 'id'), use the value as-is
         return $this->where($field, $value)->first();
+    }
+
+    /**
+     * Get dynamic SEO data fallback.
+     */
+    public function getDynamicSEOData(): SEOData
+    {
+        $title = $this->seo?->title ?: $this->name;
+        $description = $this->seo?->description;
+        $image = $this->seo?->image;
+        if (! $image && $this->image) {
+            $image = $this->image->src;
+        }
+
+        return new SEOData(
+            title: $title,
+            description: $description,
+            image: $image,
+        );
     }
 }
