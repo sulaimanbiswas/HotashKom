@@ -57,6 +57,12 @@ class SettingRequest extends FormRequest
                 'delivery_text' => 'sometimes',
                 'free_delivery' => 'sometimes',
                 'show_option' => 'required|array',
+
+                'advanced_delivery' => ['nullable', 'array'],
+                'advanced_delivery.attribute_id' => ['nullable', 'integer'],
+                'advanced_delivery.base_unit' => ['nullable', 'numeric'],
+                'advanced_delivery.extra_charge_inside' => ['nullable', 'numeric'],
+                'advanced_delivery.extra_charge_outside' => ['nullable', 'numeric'],
             ];
         }
 
@@ -94,9 +100,9 @@ class SettingRequest extends FormRequest
         if ($this->get('tab') == 'color') {
             $rules = [];
             foreach (['topbar', 'header', 'search', 'navbar', 'category_menu', 'section', 'badge', 'footer', 'primary', 'add_to_cart', 'order_now'] as $key) {
-                $rules['color.'.$key] = 'required|array';
+                $rules['color.' . $key] = 'required|array';
                 foreach (['background_color', 'background_hover', 'text_color', 'text_hover'] as $color) {
-                    $rules['color.'.$key.'.'.$color] = ['required', 'regex:/^#([a-f0-9]{6}|[a-f0-9]{3})$/i'];
+                    $rules['color.' . $key . '.' . $color] = ['required', 'regex:/^#([a-f0-9]{6}|[a-f0-9]{3})$/i'];
                 }
             }
 

@@ -278,17 +278,17 @@ class Checkout extends Component
         }
 
         $hasLandingFreeDelivery = cart()->content()->contains(
-            fn ($item): bool => (bool) ($item->options->landing_free_delivery ?? false)
+            fn($item): bool => (bool) ($item->options->landing_free_delivery ?? false)
         );
 
         if ($hasLandingFreeDelivery) {
             $this->isFreeDelivery = true;
-
             return 0;
         }
 
         $area ??= $this->shipping;
         $isFree = false;
+
         $shippingCost = app(DeliveryAreaService::class)->calculateShippingCost(
             $area,
             cart()->content(),
@@ -296,6 +296,46 @@ class Checkout extends Component
             $isFree
         );
         $this->isFreeDelivery = $isFree;
+
+        if ($isFree) {
+            return 0;
+        }
+
+        $advancedDelivery = (array) setting('advanced_delivery', []);
+
+        if (!empty($advancedDelivery) && !empty($advancedDelivery['attribute_id'])) {
+            $attributeId = $advancedDelivery['attribute_id'];
+            $baseUnit = (float) ($advancedDelivery['base_unit'] ?? 1);
+
+            $isInsideDhaka = \Illuminate\Support\Str::contains(\Illuminate\Support\Str::lower($area), 'inside')
+                || \Illuminate\Support\Str::contains(\Illuminate\Support\Str::lower($area), 'ঢাকা');
+
+            $extraChargePerUnit = $isInsideDhaka
+                ? (float) ($advancedDelivery['extra_charge_inside'] ?? 0)
+                : (float) ($advancedDelivery['extra_charge_outside'] ?? 0);
+
+            if ($extraChargePerUnit > 0) {
+                $totalWeight = 0;
+
+                foreach (cart()->content() as $item) {
+                    $product = \App\Models\Product::with('options')->find($item->id);
+
+                    if ($product) {
+                        $option = $product->options->where('attribute_id', $attributeId)->first();
+
+                        if ($option) {
+                            $weightValue = (float) filter_var($option->name, FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION);
+                            $totalWeight += ($weightValue * $item->qty);
+                        }
+                    }
+                }
+
+                if ($totalWeight > $baseUnit) {
+                    $extraWeight = ceil($totalWeight - $baseUnit);
+                    $shippingCost += ($extraWeight * $extraChargePerUnit);
+                }
+            }
+        }
 
         return $shippingCost;
     }
@@ -321,7 +361,7 @@ class Checkout extends Component
     public function cartUpdated(): void
     {
         $this->updatedShipping();
-        $this->retail = cart()->content()->mapWithKeys(fn ($item): array => [
+        $this->retail = cart()->content()->mapWithKeys(fn($item): array => [
             (string) $item->id => [
                 'price' => $this->retail[(string) $item->id]['price'] ?? $item->options['retail_price'] ?? 0,
                 'quantity' => $item->qty,
@@ -341,7 +381,7 @@ class Checkout extends Component
         //     $this->phone = '+880';
         // }
 
-        $defaultArea = collect(setting('delivery_areas') ?? [])->first(fn ($a) => (bool) data_get($a, 'is_default'));
+        $defaultArea = collect(setting('delivery_areas') ?? [])->first(fn($a) => (bool) data_get($a, 'is_default'));
         if ($defaultArea) {
             $shipping = data_get($defaultArea, 'name');
             if (! $this->retailDeliveryFeeManuallySet) {
@@ -386,9 +426,9 @@ class Checkout extends Component
                 $this->phone = Str::after($this->phone, '880');
             }
         } elseif (Str::startsWith($this->phone, '01')) { // hide prefix
-            $this->phone = '+88'.$this->phone;
+            $this->phone = '+88' . $this->phone;
         } elseif (Str::startsWith($this->phone, '8801')) {
-            $this->phone = '+'.$this->phone;
+            $this->phone = '+' . $this->phone;
         }
 
         $validationRules = [
@@ -410,7 +450,7 @@ class Checkout extends Component
         $data = $this->validate($validationRules);
 
         if (! $hidePrefix) {
-            $data['phone'] = '+880'.$data['phone'];
+            $data['phone'] = '+880' . $data['phone'];
         }
 
         throw_if(cart()->count() === 0, ValidationException::withMessages(['products' => 'Your cart is empty.']));
@@ -418,12 +458,12 @@ class Checkout extends Component
         $fraud = setting('fraud');
 
         if (
-            cacheMemo()->get('fraud:hourly:'.request()->ip()) >= ($fraud->allow_per_hour ?? 3)
-            || cacheMemo()->get('fraud:hourly:'.$data['phone']) >= ($fraud->allow_per_hour ?? 3)
-            || cacheMemo()->get('fraud:daily:'.request()->ip()) >= ($fraud->allow_per_day ?? 7)
-            || cacheMemo()->get('fraud:daily:'.$data['phone']) >= ($fraud->allow_per_day ?? 7)
+            cacheMemo()->get('fraud:hourly:' . request()->ip()) >= ($fraud->allow_per_hour ?? 3)
+            || cacheMemo()->get('fraud:hourly:' . $data['phone']) >= ($fraud->allow_per_hour ?? 3)
+            || cacheMemo()->get('fraud:daily:' . request()->ip()) >= ($fraud->allow_per_day ?? 7)
+            || cacheMemo()->get('fraud:daily:' . $data['phone']) >= ($fraud->allow_per_day ?? 7)
         ) {
-            return back()->with('error', 'প্রিয় গ্রাহক, আরও অর্ডার করতে চাইলে আমাদের হেল্প লাইন '.setting('company')->phone.' নাম্বারে কল দিয়ে সরাসরি কথা বলুন।');
+            return back()->with('error', 'প্রিয় গ্রাহক, আরও অর্ডার করতে চাইলে আমাদের হেল্প লাইন ' . setting('company')->phone . ' নাম্বারে কল দিয়ে সরাসরি কথা বলুন।');
         }
 
         $this->order = DB::transaction(function () use ($data, &$order, $fraud) {
@@ -479,7 +519,7 @@ class Checkout extends Component
                 'coupon_id' => $this->applied_coupon?->id,
                 'coupon_code' => $this->applied_coupon?->code,
                 'subtotal' => cart()->subtotal(),
-                'purchase_cost' => cart()->content()->sum(fn ($item): int|float => ($item->options->purchase_price ?: $item->options->price) * $item->qty),
+                'purchase_cost' => cart()->content()->sum(fn($item): int|float => ($item->options->purchase_price ?: $item->options->price) * $item->qty),
                 'packaging_charge' => $this->resolvePackagingCharge($data['products']),
             ];
 
@@ -496,7 +536,7 @@ class Checkout extends Component
 
             // Auto-build fbc from fbclid URL param if cookie was absent
             if (empty($fbc) && request()->has('fbclid')) {
-                $fbc = 'fb.1.'.now()->getTimestampMs().'.'.request()->query('fbclid');
+                $fbc = 'fb.1.' . now()->getTimestampMs() . '.' . request()->query('fbclid');
             }
 
             $orderTracking = [
@@ -531,17 +571,17 @@ class Checkout extends Component
 
                 deleteOrUpdateCart();
 
-                Cache::add('fraud:hourly:'.request()->ip(), 0, now()->addHour());
-                Cache::add('fraud:daily:'.request()->ip(), 0, now()->addDay());
+                Cache::add('fraud:hourly:' . request()->ip(), 0, now()->addHour());
+                Cache::add('fraud:daily:' . request()->ip(), 0, now()->addDay());
 
-                Cache::increment('fraud:hourly:'.request()->ip());
-                Cache::increment('fraud:daily:'.request()->ip());
+                Cache::increment('fraud:hourly:' . request()->ip());
+                Cache::increment('fraud:daily:' . request()->ip());
 
-                Cache::add('fraud:hourly:'.$order->phone, 0, now()->addHour());
-                Cache::add('fraud:daily:'.$order->phone, 0, now()->addDay());
+                Cache::add('fraud:hourly:' . $order->phone, 0, now()->addHour());
+                Cache::add('fraud:daily:' . $order->phone, 0, now()->addDay());
 
-                Cache::increment('fraud:hourly:'.$order->phone);
-                Cache::increment('fraud:daily:'.$order->phone);
+                Cache::increment('fraud:hourly:' . $order->phone);
+                Cache::increment('fraud:daily:' . $order->phone);
             });
 
             if (setting('meta_pixel') || config('meta-pixel.meta_pixel') || setting('pixel_ids')) {
@@ -559,7 +599,7 @@ class Checkout extends Component
 
                 // Generate persistent event ID for Lead/Purchase to be reused on thank you page
                 $eventName = config('meta-pixel.advanced_tracking') ? 'Lead' : 'Purchase';
-                $eventId = 'ch_'.strtolower($eventName).'_'.$order->id.'_'.time();
+                $eventId = 'ch_' . strtolower($eventName) . '_' . $order->id . '_' . time();
                 $orderTrackingData['event_id'] = $eventId;
 
                 // Save updated tracking data back to order
@@ -589,7 +629,7 @@ class Checkout extends Component
         }
 
         cart()->destroy();
-        session()->flash('completed', 'Dear '.$data['name'].', Your Order is Successfully Received. Thanks For Your Order.');
+        session()->flash('completed', 'Dear ' . $data['name'] . ', Your Order is Successfully Received. Thanks For Your Order.');
 
         return to_route($this->getRedirectRoute(), [
             'order' => $this->order?->getKey(),
