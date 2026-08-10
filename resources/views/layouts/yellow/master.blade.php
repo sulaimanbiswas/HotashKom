@@ -951,7 +951,11 @@
         </div>
         <!-- site__body / end -->
         <!-- site__footer -->
-        @include(config('app.footer_view') ?? 'partials.footer-default')
+        @if(!empty(config('app.footer_view')))
+            @include(config('app.footer_view'))
+        @else
+            @include('partials.footer-default')
+        @endif
         <!-- site__footer / end -->
     </div><!-- site / end -->
     @livewireScripts
