@@ -249,7 +249,7 @@
                     </div>
                 </div>
             @endif
-            @php
+            {{-- @php
                 $areaColumns = app(\App\Services\DeliveryAreaService::class)->getProductDeliveryCharges($selectedVar);
                 $columnCount = $areaColumns->count();
                 $colWidth = $columnCount > 0 ? floor(100 / $columnCount) : 100;
@@ -273,7 +273,7 @@
                         @endforeach
                     </tr>
                 </tbody>
-            </table>
+            </table> --}}
             @php
                 $wholesale = $selectedVar->wholesale ?? ['quantity' => [], 'price' => []];
                 $quantities = is_array($wholesale['quantity'] ?? null) ? $wholesale['quantity'] : [];

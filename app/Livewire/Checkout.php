@@ -33,6 +33,8 @@ class Checkout extends Component
 
     public $isFreeDelivery = false;
 
+    public bool $productForcesFreeDelivery = false;
+
     public $name = '';
 
     public $phone = '';
@@ -273,16 +275,57 @@ class Checkout extends Component
 
     public function shippingCost(?string $area = null)
     {
+        $this->productForcesFreeDelivery = false;
+
         if (! cart()->subTotal()) {
+            $this->isFreeDelivery = false;
+
             return 0;
         }
 
+        /*
+     * Product level FREE DELIVERY has highest priority.
+     *
+     * If any cart product has free_delivery enabled,
+     * or its parent product has free_delivery enabled,
+     * every other delivery rule is bypassed.
+     */
+        $cartProductIds = cart()
+            ->content()
+            ->pluck('id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+
+        $hasProductFreeDelivery = Product::query()
+            ->whereIn('id', $cartProductIds)
+            ->where(function ($query) {
+                $query
+                    ->where('free_delivery', true)
+                    ->orWhereHas('parent', function ($parentQuery) {
+                        $parentQuery->where('free_delivery', true);
+                    });
+            })
+            ->exists();
+
+        if ($hasProductFreeDelivery) {
+            $this->productForcesFreeDelivery = true;
+            $this->isFreeDelivery = true;
+
+            return 0;
+        }
+
+        /*
+     * Existing landing page free delivery logic
+     */
         $hasLandingFreeDelivery = cart()->content()->contains(
             fn($item): bool => (bool) ($item->options->landing_free_delivery ?? false)
         );
 
         if ($hasLandingFreeDelivery) {
             $this->isFreeDelivery = true;
+
             return 0;
         }
 
@@ -295,6 +338,7 @@ class Checkout extends Component
             (float) cart()->subTotal(),
             $isFree
         );
+
         $this->isFreeDelivery = $isFree;
 
         if ($isFree) {
@@ -303,12 +347,16 @@ class Checkout extends Component
 
         $advancedDelivery = (array) setting('advanced_delivery', []);
 
-        if (!empty($advancedDelivery) && !empty($advancedDelivery['attribute_id'])) {
+        if (
+            ! empty($advancedDelivery)
+            && ! empty($advancedDelivery['attribute_id'])
+        ) {
             $attributeId = $advancedDelivery['attribute_id'];
             $baseUnit = (float) ($advancedDelivery['base_unit'] ?? 1);
 
-            $isInsideDhaka = \Illuminate\Support\Str::contains(\Illuminate\Support\Str::lower($area), 'inside')
-                || \Illuminate\Support\Str::contains(\Illuminate\Support\Str::lower($area), 'ঢাকা');
+            $isInsideDhaka =
+                Str::contains(Str::lower($area), 'inside')
+                || Str::contains(Str::lower($area), 'ঢাকা');
 
             $extraChargePerUnit = $isInsideDhaka
                 ? (float) ($advancedDelivery['extra_charge_inside'] ?? 0)
@@ -318,20 +366,31 @@ class Checkout extends Component
                 $totalWeight = 0;
 
                 foreach (cart()->content() as $item) {
-                    $product = \App\Models\Product::with('options')->find($item->id);
+                    $product = Product::with('options')->find($item->id);
 
-                    if ($product) {
-                        $option = $product->options->where('attribute_id', $attributeId)->first();
+                    if (! $product) {
+                        continue;
+                    }
 
-                        if ($option) {
-                            $weightValue = (float) filter_var($option->name, FILTER_SANITIZE_NUMBER_FLOAT, FILTER_FLAG_ALLOW_FRACTION);
-                            $totalWeight += ($weightValue * $item->qty);
-                        }
+                    $option = $product
+                        ->options
+                        ->where('attribute_id', $attributeId)
+                        ->first();
+
+                    if ($option) {
+                        $weightValue = (float) filter_var(
+                            $option->name,
+                            FILTER_SANITIZE_NUMBER_FLOAT,
+                            FILTER_FLAG_ALLOW_FRACTION
+                        );
+
+                        $totalWeight += ($weightValue * $item->qty);
                     }
                 }
 
                 if ($totalWeight > $baseUnit) {
                     $extraWeight = ceil($totalWeight - $baseUnit);
+
                     $shippingCost += ($extraWeight * $extraChargePerUnit);
                 }
             }
@@ -340,10 +399,38 @@ class Checkout extends Component
         return $shippingCost;
     }
 
+    private function setDeliveryFee(float|int $fee): void
+    {
+
+        $current = (float) str_replace(
+            ',',
+            '',
+            (string) (cart()->getCost('deliveryFee') ?: 0)
+        );
+
+        $fee = (float) $fee;
+
+        $difference = $fee - $current;
+
+        if (abs($difference) > 0.0001) {
+            cart()->addCost('deliveryFee', $difference);
+        }
+    }
+
     public function updatedShipping(): void
     {
-        if (! cart()->getCost('deliveryFee')) {
-            cart()->addCost('deliveryFee', $this->shippingCost($this->shipping));
+        $deliveryFee = (float) $this->shippingCost($this->shipping);
+
+        /*
+     * Never directly add the full delivery fee.
+     * setDeliveryFee() safely replaces the previous value.
+     */
+        $this->setDeliveryFee($deliveryFee);
+
+        if ($this->productForcesFreeDelivery) {
+            $this->retailDeliveryFee = 0;
+
+            return;
         }
 
         if (
@@ -354,20 +441,31 @@ class Checkout extends Component
         ) {
             /** @var User $reseller */
             $reseller = auth('user')->user();
-            $this->retailDeliveryFee = $reseller->getShippingCost($this->shipping) ?: cart()->getCost('deliveryFee');
+
+            $this->retailDeliveryFee =
+                $reseller->getShippingCost($this->shipping)
+                ?: $deliveryFee;
         }
     }
 
     public function cartUpdated(): void
     {
         $this->updatedShipping();
-        $this->retail = cart()->content()->mapWithKeys(fn($item): array => [
-            (string) $item->id => [
-                'price' => $this->retail[(string) $item->id]['price'] ?? $item->options['retail_price'] ?? 0,
-                'quantity' => $item->qty,
-            ],
-        ])->all();
+
+        $this->retail = cart()->content()->mapWithKeys(
+            fn($item): array => [
+                (string) $item->id => [
+                    'price' => $this->retail[(string) $item->id]['price']
+                        ?? $item->options['retail_price']
+                        ?? 0,
+
+                    'quantity' => $item->qty,
+                ],
+            ]
+        )->all();
+
         $this->refreshCouponDiscount();
+
         $this->dispatch('cartUpdated');
     }
 
@@ -507,20 +605,42 @@ class Checkout extends Component
                 }
             }
 
+            $finalShippingCost = $this->shippingCost($data['shipping']);
+
+            if ($this->productForcesFreeDelivery) {
+                $this->retailDeliveryFee = 0;
+            }
+
+
             $orderData = [
                 'courier' => 'Other',
-                'is_fraud' => $oldOrders->whereIn('status', ['CANCELLED', 'RETURNED', 'PAID_RETURN'])->count() > 0,
+
+                'is_fraud' => $oldOrders
+                    ->whereIn('status', ['CANCELLED', 'RETURNED', 'PAID_RETURN'])
+                    ->count() > 0,
+
                 'is_repeat' => $oldOrders->count() > 0,
+
                 'shipping_area' => $data['shipping'],
-                'shipping_cost' => $this->shippingCost($data['shipping']),
-                'retail_delivery_fee' => $this->retailDeliveryFee,
+
+                'shipping_cost' => $finalShippingCost,
+
+                'retail_delivery_fee' => $this->productForcesFreeDelivery
+                    ? 0
+                    : $this->retailDeliveryFee,
+
                 'advanced' => $this->advanced,
                 'retail_discount' => $this->retailDiscount,
                 'coupon_discount' => $this->coupon_discount,
                 'coupon_id' => $this->applied_coupon?->id,
                 'coupon_code' => $this->applied_coupon?->code,
                 'subtotal' => cart()->subtotal(),
-                'purchase_cost' => cart()->content()->sum(fn($item): int|float => ($item->options->purchase_price ?: $item->options->price) * $item->qty),
+
+                'purchase_cost' => cart()->content()->sum(
+                    fn($item): int|float => ($item->options->purchase_price ?: $item->options->price)
+                        * $item->qty
+                ),
+
                 'packaging_charge' => $this->resolvePackagingCharge($data['products']),
             ];
 
@@ -657,9 +777,7 @@ class Checkout extends Component
 
     public function render()
     {
-        // Create a temporary Order instance to use its Pathao methods
         $tempOrder = new Order;
-        $this->cartUpdated();
 
         $template = setting('show_option')->checkout_template
             ?? config('app.checkout_template', 'legacy');
@@ -668,7 +786,13 @@ class Checkout extends Component
             ? 'livewire.checkout-simple'
             : 'livewire.checkout';
 
-        $cartProductIds = cart()->content()->pluck('id')->filter()->unique()->values()->toArray();
+        $cartProductIds = cart()
+            ->content()
+            ->pluck('id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
 
         return view($view, [
             'user' => optional(auth('user')->user()),
@@ -678,8 +802,23 @@ class Checkout extends Component
             'advanced' => $this->advanced,
             'retailDeliveryFee' => $this->retailDeliveryFee,
             'retailDiscount' => $this->retailDiscount,
-            'packagingCharge' => $this->resolvePackagingCharge(array_flip($cartProductIds)),
+            'packagingCharge' => $this->resolvePackagingCharge(
+                array_flip($cartProductIds)
+            ),
         ]);
+    }
+
+    public function previewShippingCost(?string $area = null): float|int
+    {
+        $previousIsFreeDelivery = $this->isFreeDelivery;
+        $previousProductForcesFreeDelivery = $this->productForcesFreeDelivery;
+
+        $cost = $this->shippingCost($area);
+
+        $this->isFreeDelivery = $previousIsFreeDelivery;
+        $this->productForcesFreeDelivery = $previousProductForcesFreeDelivery;
+
+        return $cost;
     }
 
     protected function fillFromCookie(): bool

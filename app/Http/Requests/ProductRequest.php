@@ -72,14 +72,15 @@ class ProductRequest extends FormRequest
             'shipping_inside' => 'nullable|integer',
             'shipping_outside' => 'nullable|integer',
             'delivery_charges' => 'nullable|array',
+            'free_delivery' => ['nullable', 'boolean'],
             'delivery_charges.*' => 'nullable|integer|min:0',
             'packaging_charge' => 'nullable|integer|min:0',
             'delivery_text' => 'nullable',
         ];
 
         if (! $this->isMethod('POST')) {
-            $rules['slug'] = ['required', 'max:255', 'regex:~^[^\s\[\],!:;{}=+%^()/\\?><`|"\']+$~u', 'unique:products,slug,'.$this->route('product')->id];
-            $rules['sku'] = 'required|unique:products,sku,'.$this->route('product')->id;
+            $rules['slug'] = ['required', 'max:255', 'regex:~^[^\s\[\],!:;{}=+%^()/\\?><`|"\']+$~u', 'unique:products,slug,' . $this->route('product')->id];
+            $rules['sku'] = 'required|unique:products,sku,' . $this->route('product')->id;
         }
 
         return $rules;

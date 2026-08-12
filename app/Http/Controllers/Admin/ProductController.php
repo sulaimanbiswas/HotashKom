@@ -54,15 +54,18 @@ class ProductController extends Controller
     public function store(ProductRequest $request)
     {
         abort_if($request->user()->is('salesman'), 403, 'You don\'t have permission.');
+
         $data = $request->validationData();
 
-        // Create the product
+        $data['free_delivery'] = $request->boolean('free_delivery');
+
         $product = Product::create($data);
 
-        // Handle relationships and dispatch copy job
         $this->handleProductRelationships($product, $data);
 
-        return redirect()->action([static::class, 'edit'], $product)->with('success', 'Product Has Been Created.');
+        return redirect()
+            ->action([static::class, 'edit'], $product)
+            ->with('success', 'Product Has Been Created.');
     }
 
     /**
@@ -81,12 +84,12 @@ class ProductController extends Controller
     public function edit(Product $product)
     {
         abort_if(request()->user()->is('salesman'), 403, 'You don\'t have permission.');
-        $product->load(['images', 'variations' => fn ($query) => $query->with('parent', 'options')]);
+        $product->load(['images', 'variations' => fn($query) => $query->with('parent', 'options')]);
 
         return $this->view(compact('product'), '', [
             'categories' => Category::nested(),
             'brands' => Brand::cached(),
-            'attributes' => cacheMemo()->remember('attributes_with_options', now()->addHours(24), fn () => Attribute::with('options')->get()),
+            'attributes' => cacheMemo()->remember('attributes_with_options', now()->addHours(24), fn() => Attribute::with('options')->get()),
         ]);
     }
 
@@ -99,6 +102,8 @@ class ProductController extends Controller
     {
         abort_if($request->user()->is('salesman'), 403, 'You don\'t have permission.');
         $data = $request->validationData();
+
+        $data['free_delivery'] = $request->boolean('free_delivery');
 
         if (! isset($data['wholesale'])) {
             $data['wholesale'] = [];
@@ -136,7 +141,7 @@ class ProductController extends Controller
 
         return redirect()
             ->action([static::class, 'index'])
-            ->with('success', 'Product Has Been Updated. <a href="'.route('products.show', $product).'" target="_blank">View the Product</a> or <a href="'.route('admin.products.edit', $product).'">Edit the Product</a> again.');
+            ->with('success', 'Product Has Been Updated. <a href="' . route('products.show', $product) . '" target="_blank">View the Product</a> or <a href="' . route('admin.products.edit', $product) . '">Edit the Product</a> again.');
     }
 
     /**
@@ -151,7 +156,7 @@ class ProductController extends Controller
         $seoData = $request->input('seo', []);
 
         // Remove empty values
-        $seoData = array_filter($seoData, fn ($value): bool => ! empty($value));
+        $seoData = array_filter($seoData, fn($value): bool => ! empty($value));
 
         if (! empty($seoData)) {
             $product->seo()->updateOrCreate([], $seoData);
@@ -197,7 +202,7 @@ class ProductController extends Controller
             // Clear category-specific filter data for both old and new categories
             $allCategoryIds = array_unique(array_merge($oldCategoryIds, $data['categories']));
             foreach ($allCategoryIds as $categoryId) {
-                cacheMemo()->forget('product_filter_data:category:'.$categoryId);
+                cacheMemo()->forget('product_filter_data:category:' . $categoryId);
             }
         }
 

@@ -28,8 +28,30 @@ class Product extends Model
     protected $with = ['thumbnail'];
 
     protected $fillable = [
-        'brand_id', 'name', 'slug', 'description', 'short_description', 'price', 'average_purchase_price', 'selling_price', 'suggested_price', 'wholesale', 'sku',
-        'source_id', 'should_track', 'stock_count', 'desc_img', 'desc_img_pos', 'is_active', 'hot_sale', 'new_arrival', 'shipping_inside', 'shipping_outside', 'delivery_charges', 'delivery_text',
+        'brand_id',
+        'name',
+        'slug',
+        'description',
+        'short_description',
+        'price',
+        'average_purchase_price',
+        'selling_price',
+        'suggested_price',
+        'wholesale',
+        'sku',
+        'source_id',
+        'should_track',
+        'stock_count',
+        'desc_img',
+        'desc_img_pos',
+        'is_active',
+        'hot_sale',
+        'new_arrival',
+        'shipping_inside',
+        'shipping_outside',
+        'delivery_charges',
+        'free_delivery',
+        'delivery_text',
         'packaging_charge',
     ];
 
@@ -109,24 +131,24 @@ class Product extends Model
 
         // Clear related products cache
         if ($product->slug) {
-            cacheMemo()->forget('related_products:'.$product->slug);
+            cacheMemo()->forget('related_products:' . $product->slug);
             cacheInvalidateNamespace('related_products');
         }
 
         // Clear category-specific filter data for all categories this product belongs to
         $product->categories->each(function ($category): void {
-            cacheMemo()->forget('product_filter_data:category:'.$category->id);
+            cacheMemo()->forget('product_filter_data:category:' . $category->id);
         });
 
         // If this is a variation, also clear parent product caches
         if ($product->parent_id) {
             $parent = $product->parent;
             if ($parent) {
-                cacheMemo()->forget('related_products:'.$parent->slug);
+                cacheMemo()->forget('related_products:' . $parent->slug);
                 cacheInvalidateNamespace('related_products');
                 // Also clear category-specific caches for parent product's categories
                 $parent->categories->each(function ($category): void {
-                    cacheMemo()->forget('product_filter_data:category:'.$category->id);
+                    cacheMemo()->forget('product_filter_data:category:' . $category->id);
                 });
             }
         }
@@ -142,10 +164,10 @@ class Product extends Model
         cacheMemo()->forget('admin_low_stock_products');
 
         // Clear EditOrder component caches
-        cacheMemo()->forget('product_with_variations:'.$product->id);
-        cacheMemo()->forget('product_with_options:'.$product->id);
+        cacheMemo()->forget('product_with_variations:' . $product->id);
+        cacheMemo()->forget('product_with_options:' . $product->id);
         if ($product->parent_id) {
-            cacheMemo()->forget('product_with_variations:'.$product->parent_id);
+            cacheMemo()->forget('product_with_variations:' . $product->parent_id);
         }
         // Clear product search caches (using namespace pattern)
         cacheInvalidateNamespace('edit_order_product_search');
@@ -164,7 +186,7 @@ class Product extends Model
                 $parentName = $parent?->name;
             }
 
-            return $parentName ? $parentName.' ['.$this->name.']' : $this->name;
+            return $parentName ? $parentName . ' [' . $this->name . ']' : $this->name;
         });
     }
 
@@ -221,7 +243,7 @@ class Product extends Model
 
     protected function inStock(): Attribute
     {
-        return Attribute::make(get: fn () => $this->track_stock
+        return Attribute::make(get: fn() => $this->track_stock
             ? $this->stock_count
             : true);
     }
@@ -292,8 +314,8 @@ class Product extends Model
 
             // Case A: already stored as ['quantity' => [...], 'price' => [...]]
             if (isset($data['quantity']) && isset($data['price']) && is_array($data['quantity']) && is_array($data['price'])) {
-                $quantities = array_map(fn ($q) => is_numeric($q) ? (int) $q : $q, $data['quantity']);
-                $prices = array_map(fn ($p) => is_null($p) ? null : (string) $p, $data['price']);
+                $quantities = array_map(fn($q) => is_numeric($q) ? (int) $q : $q, $data['quantity']);
+                $prices = array_map(fn($p) => is_null($p) ? null : (string) $p, $data['price']);
 
                 return [
                     'quantity' => $quantities,
@@ -309,10 +331,10 @@ class Product extends Model
                     $qty = is_numeric($q) ? (int) $q : $q;
                     $pairs[] = ['q' => $qty, 'p' => is_null($p) ? null : (string) $p];
                 }
-                usort($pairs, fn ($a, $b) => (int) $a['q'] <=> (int) $b['q']);
+                usort($pairs, fn($a, $b) => (int) $a['q'] <=> (int) $b['q']);
 
-                $quantities = array_map(fn ($x) => $x['q'], $pairs);
-                $prices = array_map(fn ($x) => $x['p'], $pairs);
+                $quantities = array_map(fn($x) => $x['q'], $pairs);
+                $prices = array_map(fn($x) => $x['p'], $pairs);
 
                 return [
                     'quantity' => $quantities,
@@ -367,7 +389,7 @@ class Product extends Model
     public function suggestedRetailPrice(): string
     {
         if ($this->suggested_price) {
-            return '৳'.$this->suggested_price;
+            return '৳' . $this->suggested_price;
         }
 
         return sprintf('৳%d - ৳%d', round($this->selling_price * 1.3), round($this->selling_price * 1.5));
@@ -396,7 +418,7 @@ class Product extends Model
                 $images = $parent?->relationLoaded('images') ? ($parent->images ?? collect()) : collect();
             }
 
-            return $images->first(fn (Image $image): bool => $image->pivot->img_type == 'base');
+            return $images->first(fn(Image $image): bool => $image->pivot->img_type == 'base');
         });
     }
 
@@ -409,7 +431,7 @@ class Product extends Model
                 $images = $this->parent?->relationLoaded('images') ? ($this->parent->images ?? collect()) : collect();
             }
 
-            return $images->filter(fn (Image $image): bool => $image->pivot->img_type == 'additional');
+            return $images->filter(fn(Image $image): bool => $image->pivot->img_type == 'additional');
         });
     }
 
@@ -459,11 +481,14 @@ class Product extends Model
     public static function stockStatistics(): array
     {
         $products = static::where('should_track', true)->where('stock_count', '>', 0)->get([
-            'id', 'stock_count', 'average_purchase_price', 'selling_price',
+            'id',
+            'stock_count',
+            'average_purchase_price',
+            'selling_price',
         ]);
         $totalStockCount = $products->sum('stock_count');
-        $totalPurchaseValue = $products->sum(fn ($product): int|float => $product->stock_count * ($product->average_purchase_price ?? $product->selling_price));
-        $totalSellValue = $products->sum(fn ($product): int|float => $product->stock_count * $product->selling_price);
+        $totalPurchaseValue = $products->sum(fn($product): int|float => $product->stock_count * ($product->average_purchase_price ?? $product->selling_price));
+        $totalSellValue = $products->sum(fn($product): int|float => $product->stock_count * $product->selling_price);
 
         return [
             'totalStockCount' => $totalStockCount,
@@ -483,6 +508,7 @@ class Product extends Model
             'new_arrival' => 'boolean',
             'should_track' => 'boolean',
             'delivery_charges' => 'array',
+            'free_delivery' => 'boolean',
         ];
     }
 

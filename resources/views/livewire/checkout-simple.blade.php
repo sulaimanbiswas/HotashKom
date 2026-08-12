@@ -27,9 +27,7 @@
                     <label class="simple-label">
                         আপনার নাম<span class="text-danger">*</span>
                     </label>
-                    <x-input name="name"
-                        wire:model="name"
-                        place-holder="আপনার সম্পূর্ণ নাম লিখুন" />
+                    <x-input name="name" wire:model="name" place-holder="আপনার সম্পূর্ণ নাম লিখুন" />
                     <x-error field="name" />
                 </div>
 
@@ -44,9 +42,7 @@
                             </div>
                         @endunless
                         <div class="flex-grow-1">
-                            <x-input type="tel"
-                                name="phone"
-                                wire:model="phone"
+                            <x-input type="tel" name="phone" wire:model="phone"
                                 place-holder="১১ ডিজিটের মোবাইল নম্বর লিখুন" />
                         </div>
                     </div>
@@ -57,10 +53,7 @@
                         <label class="simple-label">
                             আপনার ইমেইল
                         </label>
-                        <x-input type="email"
-                            name="email"
-                            wire:model="email"
-                            place-holder="আপনার ইমেইল ঠিকানা লিখুন" />
+                        <x-input type="email" name="email" wire:model="email" place-holder="আপনার ইমেইল ঠিকানা লিখুন" />
                         <x-error field="email" />
                     </div>
                 @endif
@@ -68,8 +61,7 @@
                     <label class="simple-label">
                         আপনার ঠিকানা<span class="text-danger">*</span>
                     </label>
-                    <x-textarea name="address"
-                        wire:model="address"
+                    <x-textarea name="address" wire:model="address"
                         place-holder="আপনার সম্পূর্ণ ঠিকানা যেমন গ্রাম, থানা, জেলা লিখুন"></x-textarea>
                     <x-error field="address" />
                 </div>
@@ -81,16 +73,23 @@
                     <div class="simple-shipping-options">
                         @foreach (app(\App\Services\DeliveryAreaService::class)->getDeliveryAreas() as $index => $area)
                             <label class="simple-shipping-option">
-                                <input type="radio"
-                                    wire:model.live="shipping"
-                                    @change="$wire.updateField('shipping', $event.target.value)"
-                                    name="shipping"
+                                <input type="radio" wire:model.live="shipping" {{--
+                                    @change="$wire.updateField('shipping', $event.target.value)" --}} name="shipping"
                                     value="{{ data_get($area, 'name') }}">
                                 <span class="simple-shipping-content">
                                     <span class="simple-shipping-title">
                                         {{ data_get($area, 'name') }}
+
                                         @if (cart()->subTotal())
-                                            ({{ $isFreeDelivery ? 'FREE' : $this->shippingCost(data_get($area, 'name')).' Tk' }})
+                                            @php
+                                                $areaCost = $this->previewShippingCost(
+                                                    data_get($area, 'name')
+                                                );
+                                            @endphp
+
+                                            <strong>
+                                                ({{ $areaCost <= 0 ? 'FREE' : $areaCost . ' Tk' }})
+                                            </strong>
                                         @endif
                                     </span>
                                 </span>
@@ -105,9 +104,7 @@
                         <label class="simple-label">
                             নোট (অপশনাল)
                         </label>
-                        <x-textarea name="note"
-                            wire:model="note"
-                            placeholder="আপনি চাইলে কোন নোট লিখতে পারেন।"></x-textarea>
+                        <x-textarea name="note" wire:model="note" placeholder="আপনি চাইলে কোন নোট লিখতে পারেন।"></x-textarea>
                         <x-error field="note" />
                     </div>
                 @endunless
@@ -128,15 +125,14 @@
 
                     <div class="simple-form-group">
                         <label class="simple-label">
-                            এলাকা@if(setting('Pathao')->user_required_city_area ?? false)<span class="text-danger">*</span>@endif
+                            এলাকা@if(setting('Pathao')->user_required_city_area ?? false)<span
+                            class="text-danger">*</span>@endif
                         </label>
                         <div wire:loading.class="d-flex" wire:target="city_id" class="d-none h-100 align-items-center">
                             এলাকা লোড হচ্ছে...
                         </div>
-                        <select wire:loading.remove
-                            wire:target="city_id"
-                            class="form-control @error('area_id') is-invalid @enderror"
-                            wire:model.live="area_id">
+                        <select wire:loading.remove wire:target="city_id"
+                            class="form-control @error('area_id') is-invalid @enderror" wire:model.live="area_id">
                             <option value="">এলাকা নির্বাচন করুন</option>
                             @foreach ($pathaoAreas as $area)
                                 <option value="{{ $area->zone_id }}">{{ $area->zone_name }}</option>
@@ -157,10 +153,7 @@
                 </div>
 
                 <div class="simple-submit-wrapper">
-                    <button type="button"
-                        place-order
-                        wire:click="checkout"
-                        wire:loading.attr="disabled"
+                    <button type="button" place-order wire:click="checkout" wire:loading.attr="disabled"
                         class="btn btn-block simple-submit-btn">
                         {{ setting('show_option')->checkout_button_text ?? 'অর্ডার কনফার্ম করুন' }}
                     </button>
@@ -177,15 +170,11 @@
                 <div class="simple-form-group">
                     <label class="simple-label d-block">Coupon Code</label>
                     <div class="input-group">
-                        <input type="text"
-                            wire:model.live="coupon_code"
-                            wire:change="applyCoupon"
+                        <input type="text" wire:model.live="coupon_code" wire:change="applyCoupon"
                             class="form-control @error('coupon_code') is-invalid @enderror"
                             placeholder="Enter coupon code" />
                         <div class="input-group-append">
-                            <button type="button"
-                                wire:click="applyCoupon"
-                                wire:loading.attr="disabled"
+                            <button type="button" wire:click="applyCoupon" wire:loading.attr="disabled"
                                 class="btn btn-outline-primary">
                                 Apply
                             </button>
@@ -195,28 +184,39 @@
                     @if ($applied_coupon)
                         <div class="mt-1 text-success">
                             Coupon "{{ $applied_coupon->name }}" applied. Discount: {!! theMoney($coupon_discount) !!}
-                            <button type="button" wire:click="removeCoupon" class="p-0 btn btn-link btn-sm text-danger">Remove</button>
+                            <button type="button" wire:click="removeCoupon"
+                                class="p-0 btn btn-link btn-sm text-danger">Remove</button>
                         </div>
                     @endif
                 </div>
 
                 <div class="mt-3 simple-order-totals">
                     @php
-                        $deliveryFee = cart()->getCost('deliveryFee') ?: 0;
+                        $deliveryFee = (float) str_replace(
+                            ',',
+                            '',
+                            (string) (cart()->getCost('deliveryFee') ?: 0)
+                        );
+
                         $sellingSubtotal = 0;
                         $sellingTotal = 0;
-                        $couponDiscount = $coupon_discount ?? 0;
+                        $couponDiscount = (float) ($coupon_discount ?? 0);
 
                         if (isOninda()) {
                             $cartItems = cart()->content();
+
                             $sellingSubtotal = $cartItems->sum(function ($item): float|int {
                                 $id = $item->id;
-                                $price = $this->retail[$id]['price'] ?? $item->options->retail_price ?? $item->price;
+
+                                $price = $this->retail[$id]['price']
+                                    ?? $item->options->retail_price
+                                    ?? $item->price;
 
                                 return (float) $price * $item->qty;
                             });
 
-                            $sellingTotal = $sellingSubtotal
+                            $sellingTotal =
+                                $sellingSubtotal
                                 + (float) $this->retailDeliveryFee
                                 - (float) $this->advanced
                                 - (float) $this->retailDiscount;
@@ -279,33 +279,21 @@
 
                             <div class="mb-2 simple-form-group">
                                 <label class="mb-1 simple-label">Your Delivery Charge</label>
-                                <input type="text"
-                                    @focus="$event.target.select()"
-                                    step="10"
-                                    class="form-control form-control-sm"
-                                    x-model="retail_delivery"
+                                <input type="text" @focus="$event.target.select()" step="10"
+                                    class="form-control form-control-sm" x-model="retail_delivery"
                                     wire:model.live="retailDeliveryFee" />
                             </div>
 
                             <div class="mb-2 simple-form-group">
                                 <label class="mb-1 simple-label">Advanced</label>
-                                <input type="text"
-                                    @focus="$event.target.select()"
-                                    step="10"
-                                    class="form-control form-control-sm"
-                                    x-model="advanced"
-                                    wire:model.live="advanced" />
+                                <input type="text" @focus="$event.target.select()" step="10"
+                                    class="form-control form-control-sm" x-model="advanced" wire:model.live="advanced" />
                             </div>
 
                             <div class="mb-2 simple-form-group">
                                 <label class="mb-1 simple-label">Discount (TK)</label>
-                                <input type="text"
-                                    @focus="$event.target.select()"
-                                    x-model="retailDiscount"
-                                    step="10"
-                                    min="0"
-                                    class="form-control form-control-sm"
-                                    wire:model.live="retailDiscount" />
+                                <input type="text" @focus="$event.target.select()" x-model="retailDiscount" step="10" min="0"
+                                    class="form-control form-control-sm" wire:model.live="retailDiscount" />
                                 <x-error field="retailDiscount" />
                             </div>
                         </div>
@@ -331,5 +319,3 @@
         </div>
     @endif
 </div>
-
-

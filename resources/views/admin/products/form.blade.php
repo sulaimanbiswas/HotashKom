@@ -17,7 +17,8 @@
                     <div class="input-group-text">{{ url('/product') }}/</div>
                 </div>
                 <x-input name="slug" :value="$product->slug" />
-                <button class="input-group-append align-items-center btn btn-secondary" type="button" onclick="window.open('{{url('/products').'/'}}'+this.previousElementSibling.value, '_blank')">VISIT</button>
+                <button class="input-group-append align-items-center btn btn-secondary" type="button"
+                    onclick="window.open('{{url('/products') . '/'}}'+this.previousElementSibling.value, '_blank')">VISIT</button>
             </div>
             <x-error field="slug" />
         </div>
@@ -25,9 +26,11 @@
     <div class="col-sm-12">
         <div class="form-group">
             <x-label for="short_description" />
-            <x-textarea name="short_description" cols="30" rows="3" placeholder="Brief description for product listings">{{ old('short_description', $product->short_description) }}</x-textarea>
+            <x-textarea name="short_description" cols="30" rows="3"
+                placeholder="Brief description for product listings">{{ old('short_description', $product->short_description) }}</x-textarea>
             <x-error field="short_description" />
-            <small class="form-text text-muted">Optional: A brief description that will be displayed on product cards and listings.</small>
+            <small class="form-text text-muted">Optional: A brief description that will be displayed on product cards
+                and listings.</small>
         </div>
     </div>
     <div class="col-sm-12">
@@ -42,14 +45,16 @@
             <div class="col-md-6">
                 <div class="form-group">
                     <x-label for="categories" /><span class="text-danger">*</span>
-                    <x-category-dropdown :categories="$categories" name="categories[]" placeholder="Select Category" id="categories" multiple="true" :selected="old('categories', $product->categories->pluck('id')->toArray())" />
+                    <x-category-dropdown :categories="$categories" name="categories[]" placeholder="Select Category"
+                        id="categories" multiple="true" :selected="old('categories', $product->categories->pluck('id')->toArray())" />
                     <x-error field="categories" class="d-block" />
                 </div>
             </div>
             <div class="col-md-6">
                 <div class="form-group">
                     <x-label for="brand" />
-                    <x-category-dropdown :categories="$brands" name="brand" placeholder="Select Brand" id="brand" :selected="old('brand', $product->brand_id)" />
+                    <x-category-dropdown :categories="$brands" name="brand" placeholder="Select Brand" id="brand"
+                        :selected="old('brand', $product->brand_id)" />
                     <x-error field="brand" class="d-block" />
                 </div>
             </div>
@@ -60,7 +65,8 @@
                 <div class="form-group">
                     <div class="custom-control custom-checkbox">
                         <input type="hidden" name="should_track" value="0" />
-                        <x-checkbox name="should_track" value="1" :checked="!!$product->should_track" class="should_track custom-control-input" />
+                        <x-checkbox name="should_track" value="1" :checked="!!$product->should_track"
+                            class="should_track custom-control-input" />
                         <x-label for="should_track" class="custom-control-label" />
                         <x-error field="should_track" />
                     </div>
@@ -74,7 +80,8 @@
                 </div>
             </div>
             <div class="col-md-6">
-                <div class="form-group stock-count" @if(!old('should_track', $product->should_track)) style="display: none;" @endif>
+                <div class="form-group stock-count" @if(!old('should_track', $product->should_track))
+                style="display: none;" @endif>
                     <x-label for="stock_count" /><span class="text-danger">*</span>
                     <x-input name="stock_count" :value="$product->stock_count" />
                     <x-error field="stock_count" />
@@ -99,22 +106,22 @@
                 </div>
             </div>
             @if(request()->user()->is('admin'))
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="average_purchase_price">Average Purchase Price</label>
-                    <x-input name="average_purchase_price" :value="$product->average_purchase_price" />
-                    <x-error field="average_purchase_price" />
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="average_purchase_price">Average Purchase Price</label>
+                        <x-input name="average_purchase_price" :value="$product->average_purchase_price" />
+                        <x-error field="average_purchase_price" />
+                    </div>
                 </div>
-            </div>
             @endif
             @if(isOninda() && config('app.resell'))
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label for="suggested_price">Suggested Retail Price</label>
-                    <x-input name="suggested_price" :value="$product->suggested_price" />
-                    <x-error field="suggested_price" />
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="suggested_price">Suggested Retail Price</label>
+                        <x-input name="suggested_price" :value="$product->suggested_price" />
+                        <x-error field="suggested_price" />
+                    </div>
                 </div>
-            </div>
             @endif
         </div>
         <div class="shadow-sm card rounded-0">
@@ -130,7 +137,8 @@
                 @foreach (old('wholesale.price', $product->wholesale['price'] ?? []) as $price)
                     <div class="mb-1 form-group">
                         <div class="input-group">
-                            <x-input name="wholesale[quantity][]" placeholder="Quantity" value="{{old('wholesale.quantity', $product->wholesale['quantity'] ?? [])[$loop->index]}}" />
+                            <x-input name="wholesale[quantity][]" placeholder="Quantity"
+                                value="{{old('wholesale.quantity', $product->wholesale['quantity'] ?? [])[$loop->index]}}" />
                             <x-input name="wholesale[price][]" placeholder="Price" value="{{$price}}" />
                             <div class="input-group-append">
                                 <button type="button" class="btn btn-danger btn-sm remove-wholesale">
@@ -155,6 +163,22 @@
                     <div class="col-sm-12">
                         <h4><small class="mb-1 border-bottom">Delivery Charge</small></h4>
                     </div>
+                    <div class="col-sm-12">
+                        <div class="form-group">
+                            <div class="checkbox checkbox-success">
+                                <input type="hidden" name="free_delivery" value="0">
+
+                                <x-checkbox name="free_delivery" value="1" :checked="(bool) old('free_delivery', $product->free_delivery)" />
+
+                                <label for="free_delivery">
+                                    <strong>Free Delivery</strong>
+                                </label>
+
+                                <x-error field="free_delivery" />
+
+                            </div>
+                        </div>
+                    </div>
                     @php
                         $deliveryAreaService = app(\App\Services\DeliveryAreaService::class);
                         $deliveryAreas = $deliveryAreaService->getDeliveryAreas();
@@ -178,28 +202,34 @@
                         @endphp
                         <div class="col-md-12">
                             <div class="form-group">
-                                <label for="delivery_charge_{{ \Illuminate\Support\Str::slug($areaName) }}">{{ $areaName }}</label>
-                                <x-input name="delivery_charges[{{ $areaName }}]" :value="$savedCharge" placeholder="{{ $area['cost'] }}" />
+                                <label
+                                    for="delivery_charge_{{ \Illuminate\Support\Str::slug($areaName) }}">{{ $areaName }}</label>
+                                <x-input name="delivery_charges[{{ $areaName }}]" :value="$savedCharge"
+                                    placeholder="{{ $area['cost'] }}" />
                                 <x-error field="delivery_charges.{{ $areaName }}" />
                             </div>
                         </div>
                     @endforeach
                     @if(isOninda() && config('app.resell'))
-                    <div class="col-md-12">
-                        <div class="form-group">
-                            <label for="packaging_charge">Packaging Charge</label>
-                            <x-input name="packaging_charge" :value="$product->packaging_charge" placeholder="{{ config('app.packaging_charge', 25) }}" />
-                            <x-error field="packaging_charge" />
-                            <small class="form-text text-muted">Leave blank to use default ({{ config('app.packaging_charge', 25) }} ৳). Reseller's order packaging charge = max across all ordered products.</small>
+                        <div class="col-md-12">
+                            <div class="form-group">
+                                <label for="packaging_charge">Packaging Charge</label>
+                                <x-input name="packaging_charge" :value="$product->packaging_charge"
+                                    placeholder="{{ config('app.packaging_charge', 25) }}" />
+                                <x-error field="packaging_charge" />
+                                <small class="form-text text-muted">Leave blank to use default
+                                    ({{ config('app.packaging_charge', 25) }} ৳). Reseller's order packaging charge = max
+                                    across all ordered products.</small>
+                            </div>
                         </div>
-                    </div>
                     @endif
                     <div class="col-sm-12">
                         <h4><small class="mb-1 border-bottom">Delivery and Return Policy</small></h4>
                     </div>
                     <div class="col-sm-12">
                         <div class="form-group">
-                            <x-textarea editor name="delivery_text">{{old('delivery_text', $product->delivery_text ?? setting('delivery_text'))}}</x-textarea>
+                            <x-textarea editor
+                                name="delivery_text">{{old('delivery_text', $product->delivery_text ?? setting('delivery_text'))}}</x-textarea>
                             <x-error field="delivery_text" />
                         </div>
                     </div>
@@ -242,15 +272,24 @@
                             <!-- Button to Open the Modal -->
                             <label for="base_image" class="mb-0 d-block">
                                 <strong>Base Image</strong>
-                                <button type="button" class="px-2 btn single btn-light" data-toggle="modal" data-target="#single-picker" style="background: transparent; margin-left: 5px;">
+                                <button type="button" class="px-2 btn single btn-light" data-toggle="modal"
+                                    data-target="#single-picker" style="background: transparent; margin-left: 5px;">
                                     <i class="mr-1 fa fa-image text-secondary"></i>
                                     <span>Browse</span>
                                 </button>
                             </label>
-                            <div id="preview-{{optional($product->base_image)->id}}" class="base_image-preview @unless(old('base_image', optional($product->base_image)->id)) d-none @endunless" style="height: 150px; width: 150px; margin: 5px; margin-left: 0px;">
-                                <img src="{{ old('base_image_src', asset(optional($product->base_image)->src)) }}" alt="Base Image" data-toggle="modal" data-target="#single-picker" id="base_image-preview" class="img-thumbnail img-responsive" style="display: {{ old('base_image_src', optional($product->base_image)->src) ? '' : 'none' }};">
-                                <input type="hidden" name="base_image_src" value="{{ old('base_image_src', asset(optional($product->base_image)->src)) }}">
-                                <input type="hidden" name="base_image" value="{{ old('base_image', optional($product->base_image)->id) }}" id="base-image" class="form-control">
+                            <div id="preview-{{optional($product->base_image)->id}}"
+                                class="base_image-preview @unless(old('base_image', optional($product->base_image)->id)) d-none @endunless"
+                                style="height: 150px; width: 150px; margin: 5px; margin-left: 0px;">
+                                <img src="{{ old('base_image_src', asset(optional($product->base_image)->src)) }}"
+                                    alt="Base Image" data-toggle="modal" data-target="#single-picker"
+                                    id="base_image-preview" class="img-thumbnail img-responsive"
+                                    style="display: {{ old('base_image_src', optional($product->base_image)->src) ? '' : 'none' }};">
+                                <input type="hidden" name="base_image_src"
+                                    value="{{ old('base_image_src', asset(optional($product->base_image)->src)) }}">
+                                <input type="hidden" name="base_image"
+                                    value="{{ old('base_image', optional($product->base_image)->id) }}" id="base-image"
+                                    class="form-control">
                             </div>
                             @error('base_image')
                                 <small class="text-danger">{{ $message }}</small>
@@ -259,22 +298,32 @@
                         <div class="form-group">
                             <label for="additional_images" class="mb-0 d-block">
                                 <strong>Additional Images</strong>
-                                <button type="button" class="px-2 btn multiple btn-light" data-toggle="modal" data-target="#multi-picker" style="background: transparent; margin-left: 5px;">
+                                <button type="button" class="px-2 btn multiple btn-light" data-toggle="modal"
+                                    data-target="#multi-picker" style="background: transparent; margin-left: 5px;">
                                     <i class="mr-1 fa fa-image text-secondary"></i>
                                     <span>Browse</span>
                                 </button>
                             </label>
-                            <ul id="sortable" class="flex-wrap additional_images-previews d-flex" style="margin-left: -5px;">
+                            <ul id="sortable" class="flex-wrap additional_images-previews d-flex"
+                                style="margin-left: -5px;">
                                 @php
                                     $ids = old('additional_images', $product->additional_images->pluck('id')->toArray());
                                     $srcs = old('additional_images_srcs', $product->additional_images->pluck('src')->toArray());
                                 @endphp
                                 @foreach($srcs as $src)
-                                    <li id="preview-{{$ids[$loop->index]}}" class="additional_images-preview position-relative" style="height: 150px; width: 150px; margin: 5px;">
-                                        <i class="fa fa-times text-danger position-absolute" style="font-size: large; top: 0; right: 0; background: #ddd; padding: 2px; border-radius: 3px; cursor: pointer;" onclick="this.parentNode.remove()"></i>
-                                        <img src="{{ $src }}" alt="Additional Image" data-toggle="modal" data-target="#multi-picker" id="additional_image-preview" class="img-thumbnail img-responsive">
-                                        <input type="hidden" name="additional_images[]" value="{{ $ids[$loop->index] }}" style="margin: 5px;">
-                                        <input type="hidden" name="additional_images_srcs[]" value="{{ $src }}" style="margin: 5px;">
+                                    <li id="preview-{{$ids[$loop->index]}}"
+                                        class="additional_images-preview position-relative"
+                                        style="height: 150px; width: 150px; margin: 5px;">
+                                        <i class="fa fa-times text-danger position-absolute"
+                                            style="font-size: large; top: 0; right: 0; background: #ddd; padding: 2px; border-radius: 3px; cursor: pointer;"
+                                            onclick="this.parentNode.remove()"></i>
+                                        <img src="{{ $src }}" alt="Additional Image" data-toggle="modal"
+                                            data-target="#multi-picker" id="additional_image-preview"
+                                            class="img-thumbnail img-responsive">
+                                        <input type="hidden" name="additional_images[]" value="{{ $ids[$loop->index] }}"
+                                            style="margin: 5px;">
+                                        <input type="hidden" name="additional_images_srcs[]" value="{{ $src }}"
+                                            style="margin: 5px;">
                                     </li>
                                 @endforeach
                             </ul>
@@ -286,21 +335,17 @@
                         <div class="form-group" x-data="{desc_img: {{old('desc_img', $product->desc_img ?? 0)}}}">
                             <div class="checkbox d-inline checkbox-primary">
                                 <input type="hidden" name="desc_img" value="0">
-                                <x-checkbox name="desc_img" @change="desc_img = $event.target.checked" x-bind:checked="desc_img" value="1" />
+                                <x-checkbox name="desc_img" @change="desc_img = $event.target.checked"
+                                    x-bind:checked="desc_img" value="1" />
                                 <label for="desc_img">Show Images in Description</label>
                                 <x-error field="desc_img" />
                             </div>
                             <div x-show="desc_img" class="form-control @error('desc_img_pos') is-invalid @enderror">
                                 @foreach (['before_content' => 'Before Content', 'after_content' => 'After Content'] as $key => $option)
                                     <div class="custom-control custom-radio custom-control-inline">
-                                        <input type="radio"
-                                            name="desc_img_pos"
-                                            class="custom-control-input"
-                                            id="{{ $key }}"
-                                            value="{{ $key }}"
-                                            {{ $key == old('desc_img_pos', $product->desc_img_pos ?? 'after_content') ? 'checked' : '' }}>
-                                        <label class="custom-control-label"
-                                            for="{{ $key }}">{{ $option }}</label>
+                                        <input type="radio" name="desc_img_pos" class="custom-control-input" id="{{ $key }}"
+                                            value="{{ $key }}" {{ $key == old('desc_img_pos', $product->desc_img_pos ?? 'after_content') ? 'checked' : '' }}>
+                                        <label class="custom-control-label" for="{{ $key }}">{{ $option }}</label>
                                     </div>
                                 @endforeach
                             </div>
