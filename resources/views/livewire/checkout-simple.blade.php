@@ -72,21 +72,19 @@
                     </label>
                     <div class="simple-shipping-options">
                         @foreach (app(\App\Services\DeliveryAreaService::class)->getDeliveryAreas() as $index => $area)
+                            @php
+                                $areaName = data_get($area, 'name');
+                                $areaCost = $this->previewShippingCost($areaName);
+                            @endphp
+
                             <label class="simple-shipping-option">
-                                <input type="radio" wire:model.live="shipping" {{--
-                                    @change="$wire.updateField('shipping', $event.target.value)" --}} name="shipping"
-                                    value="{{ data_get($area, 'name') }}">
+                                <input type="radio" wire:model.live="shipping" name="shipping" value="{{ $areaName }}">
+
                                 <span class="simple-shipping-content">
                                     <span class="simple-shipping-title">
-                                        {{ data_get($area, 'name') }}
+                                        {{ $areaName }}
 
                                         @if (cart()->subTotal())
-                                            @php
-                                                $areaCost = $this->previewShippingCost(
-                                                    data_get($area, 'name')
-                                                );
-                                            @endphp
-
                                             <strong>
                                                 ({{ $areaCost <= 0 ? 'FREE' : $areaCost . ' Tk' }})
                                             </strong>
