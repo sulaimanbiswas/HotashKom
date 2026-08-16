@@ -273,78 +273,121 @@ class Checkout extends Component
         }
     }
 
-    public function shippingCost(?string $area = null)
+    /**
+     * Return only cart items that should participate in delivery calculation.
+     *
+     * A product is excluded from delivery calculation when:
+     * - the product itself has free_delivery enabled;
+     * - its parent product has free_delivery enabled (variation support); or
+     * - the cart item was added with landing_free_delivery enabled.
+     *
+     * IMPORTANT: free-delivery products are removed only from shipping
+     * calculations. They remain in the cart/order normally.
+     */
+    private function chargeableCartItems()
     {
-        $this->productForcesFreeDelivery = false;
+        $cartItems = cart()->content();
 
-        if (! cart()->subTotal()) {
-            $this->isFreeDelivery = false;
-
-            return 0;
+        if ($cartItems->isEmpty()) {
+            return collect();
         }
 
-        /*
-     * Product level FREE DELIVERY has highest priority.
-     *
-     * If any cart product has free_delivery enabled,
-     * or its parent product has free_delivery enabled,
-     * every other delivery rule is bypassed.
-     */
-        $cartProductIds = cart()
-            ->content()
+        $productIds = $cartItems
             ->pluck('id')
             ->filter()
             ->unique()
-            ->values()
-            ->toArray();
+            ->values();
 
-        $hasProductFreeDelivery = Product::query()
-            ->whereIn('id', $cartProductIds)
-            ->where(function ($query) {
-                $query
-                    ->where('free_delivery', true)
-                    ->orWhereHas('parent', function ($parentQuery) {
-                        $parentQuery->where('free_delivery', true);
-                    });
+        $products = Product::query()
+            ->with(['parent:id,free_delivery'])
+            ->whereIn('id', $productIds)
+            ->get(['id', 'parent_id', 'free_delivery'])
+            ->keyBy('id');
+
+        return $cartItems
+            ->filter(function ($item) use ($products): bool {
+                // Landing-page free delivery is item-level as well.
+                if ((bool) ($item->options->landing_free_delivery ?? false)) {
+                    return false;
+                }
+
+                $product = $products->get($item->id);
+
+                // Safety fallback: if product cannot be loaded, do not
+                // accidentally give free delivery.
+                if (! $product) {
+                    return true;
+                }
+
+                $hasFreeDelivery =
+                    (bool) $product->free_delivery
+                    || (bool) ($product->parent?->free_delivery ?? false);
+
+                return ! $hasFreeDelivery;
             })
-            ->exists();
+            ->values();
+    }
 
-        if ($hasProductFreeDelivery) {
+    /**
+     * Calculate delivery charge using ONLY chargeable products.
+     *
+     * Example:
+     * - Free-delivery product: 5kg  -> excluded completely
+     * - Normal product A: 1kg      -> included
+     * - Normal product B: 1kg      -> included
+     * - Base unit: 1kg
+     * - Base delivery: 120
+     * - Extra charge: 20/kg
+     *
+     * Chargeable weight = 2kg, so final delivery = 120 + 20 = 140.
+     */
+    public function shippingCost(?string $area = null)
+    {
+        $this->productForcesFreeDelivery = false;
+        $this->isFreeDelivery = false;
+
+        if (cart()->content()->isEmpty()) {
+            return 0;
+        }
+
+        $chargeableItems = $this->chargeableCartItems();
+
+        // Only when EVERY cart item is free-delivery should the whole
+        // delivery fee become zero.
+        if ($chargeableItems->isEmpty()) {
             $this->productForcesFreeDelivery = true;
             $this->isFreeDelivery = true;
 
             return 0;
         }
 
-        /*
-     * Existing landing page free delivery logic
-     */
-        $hasLandingFreeDelivery = cart()->content()->contains(
-            fn($item): bool => (bool) ($item->options->landing_free_delivery ?? false)
+        $area ??= $this->shipping;
+
+        // Free-delivery products must not help satisfy subtotal-based
+        // delivery conditions either, so use only the chargeable subtotal.
+        $chargeableSubtotal = $chargeableItems->sum(
+            fn($item): float => (float) $item->price * (int) $item->qty
         );
 
-        if ($hasLandingFreeDelivery) {
-            $this->isFreeDelivery = true;
-
-            return 0;
-        }
-
-        $area ??= $this->shipping;
         $isFree = false;
 
-        $shippingCost = app(DeliveryAreaService::class)->calculateShippingCost(
-            $area,
-            cart()->content(),
-            (float) cart()->subTotal(),
-            $isFree
-        );
+        // Base/area/product-specific delivery charge is calculated using
+        // only the products that are not marked as free delivery.
+        $shippingCost = (float) app(DeliveryAreaService::class)
+            ->calculateShippingCost(
+                $area,
+                $chargeableItems,
+                (float) $chargeableSubtotal,
+                $isFree
+            );
 
-        $this->isFreeDelivery = $isFree;
+        $this->isFreeDelivery = (bool) $isFree;
 
         if ($isFree) {
             return 0;
         }
 
+        // Advanced weight-based delivery charge.
         $advancedDelivery = (array) setting('advanced_delivery', []);
 
         if (
@@ -352,46 +395,72 @@ class Checkout extends Component
             && ! empty($advancedDelivery['attribute_id'])
         ) {
             $attributeId = $advancedDelivery['attribute_id'];
-            $baseUnit = (float) ($advancedDelivery['base_unit'] ?? 1);
+            $baseUnit = max(0, (float) ($advancedDelivery['base_unit'] ?? 1));
+
+            $normalizedArea = Str::lower((string) $area);
 
             $isInsideDhaka =
-                Str::contains(Str::lower($area), 'inside')
-                || Str::contains(Str::lower($area), 'ঢাকা');
+                Str::contains($normalizedArea, 'inside')
+                || Str::contains($normalizedArea, 'ঢাকা');
 
             $extraChargePerUnit = $isInsideDhaka
                 ? (float) ($advancedDelivery['extra_charge_inside'] ?? 0)
                 : (float) ($advancedDelivery['extra_charge_outside'] ?? 0);
 
             if ($extraChargePerUnit > 0) {
-                $totalWeight = 0;
+                $chargeableProductIds = $chargeableItems
+                    ->pluck('id')
+                    ->filter()
+                    ->unique()
+                    ->values();
 
-                foreach (cart()->content() as $item) {
-                    $product = Product::with('options')->find($item->id);
+                // Load only chargeable products. Parent options are loaded as
+                // a fallback for variations whose weight is defined on parent.
+                $products = Product::query()
+                    ->with(['options', 'parent.options'])
+                    ->whereIn('id', $chargeableProductIds)
+                    ->get()
+                    ->keyBy('id');
+
+                $totalWeight = 0.0;
+
+                foreach ($chargeableItems as $item) {
+                    $product = $products->get($item->id);
 
                     if (! $product) {
                         continue;
                     }
 
-                    $option = $product
-                        ->options
-                        ->where('attribute_id', $attributeId)
-                        ->first();
+                    $option = $product->options
+                        ->firstWhere('attribute_id', $attributeId);
 
-                    if ($option) {
-                        $weightValue = (float) filter_var(
-                            $option->name,
-                            FILTER_SANITIZE_NUMBER_FLOAT,
-                            FILTER_FLAG_ALLOW_FRACTION
-                        );
-
-                        $totalWeight += ($weightValue * $item->qty);
+                    // Variation fallback: use parent weight option if the
+                    // variation itself does not have the configured attribute.
+                    if (! $option && $product->parent) {
+                        $option = $product->parent->options
+                            ->firstWhere('attribute_id', $attributeId);
                     }
+
+                    if (! $option) {
+                        continue;
+                    }
+
+                    $weightValue = (float) filter_var(
+                        (string) $option->name,
+                        FILTER_SANITIZE_NUMBER_FLOAT,
+                        FILTER_FLAG_ALLOW_FRACTION
+                    );
+
+                    if ($weightValue <= 0) {
+                        continue;
+                    }
+
+                    $totalWeight += $weightValue * (int) $item->qty;
                 }
 
                 if ($totalWeight > $baseUnit) {
                     $extraWeight = ceil($totalWeight - $baseUnit);
-
-                    $shippingCost += ($extraWeight * $extraChargePerUnit);
+                    $shippingCost += $extraWeight * $extraChargePerUnit;
                 }
             }
         }
@@ -421,10 +490,6 @@ class Checkout extends Component
     {
         $deliveryFee = (float) $this->shippingCost($this->shipping);
 
-        /*
-     * Never directly add the full delivery fee.
-     * setDeliveryFee() safely replaces the previous value.
-     */
         $this->setDeliveryFee($deliveryFee);
 
         if ($this->productForcesFreeDelivery) {
