@@ -238,39 +238,74 @@ class Checkout extends Component
     public function increaseQuantity($id): void
     {
         $item = cart()->get($id);
-        if ($item->qty < $item->options->max || $item->options->max === -1) {
-            $qty = $item->qty + 1;
-            $content = cart()->content();
-            $product = Product::find($item->id);
-            $item->price = $price = $product->getPrice($qty);
-            if (! isOninda() || ! config('app.resell')) {
-                $item->options['retail_price'] = $price;
-            }
-            $content->put($item->rowId, $item);
-            // session()->put(cart()->currentInstance(), $content);
 
-            cart()->update($id, $item->qty + 1);
-            $this->cartUpdated();
+        if (! $item) {
+            return;
         }
+
+        $currentQuantity = (int) $item->qty;
+        $maxQuantity = (int) ($item->options->max ?? -1);
+
+        if ($maxQuantity !== -1 && $currentQuantity >= $maxQuantity) {
+            return;
+        }
+
+        $newQuantity = $currentQuantity + 1;
+
+        $product = Product::find($item->id);
+
+        if (! $product) {
+            return;
+        }
+
+        $price = $product->getPrice($newQuantity);
+
+        $item->price = $price;
+
+        if (! isOninda() || ! config('app.resell')) {
+            $item->options['retail_price'] = $price;
+        }
+
+        cart()->update($id, $newQuantity);
+
+        $this->cartUpdated();
     }
 
     public function decreaseQuantity($id): void
     {
         $item = cart()->get($id);
-        if ($item->qty > 1) {
-            $qty = $item->qty - 1;
-            $content = cart()->content();
-            $product = Product::find($item->id);
-            $item->price = $price = $product->getPrice($qty);
-            if (! isOninda() || ! config('app.resell')) {
-                $item->options['retail_price'] = $price;
-            }
-            $content->put($item->rowId, $item);
-            // session()->put(cart()->currentInstance(), $content);
 
-            cart()->update($id, $qty);
-            $this->cartUpdated();
+        if (! $item) {
+            return;
         }
+
+        $currentQuantity = (int) $item->qty;
+
+        if ($currentQuantity <= 1) {
+            $this->updatedShipping();
+
+            return;
+        }
+
+        $newQuantity = $currentQuantity - 1;
+
+        $product = Product::find($item->id);
+
+        if (! $product) {
+            return;
+        }
+
+        $price = $product->getPrice($newQuantity);
+
+        $item->price = $price;
+
+        if (! isOninda() || ! config('app.resell')) {
+            $item->options['retail_price'] = $price;
+        }
+
+        cart()->update($id, $newQuantity);
+
+        $this->cartUpdated();
     }
 
     /**
