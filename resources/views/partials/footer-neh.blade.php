@@ -423,13 +423,7 @@
             <div class="rankmet-footer-copyright">
                 &copy; {{ date('Y') }} {{ $company->name ?? '' }}. All Rights Reserved.
             </div>
-            @if(isset($company->dev_name) && $company->dev_name != '#' && isset($company->dev_link) && $company->dev_link != '#')
-                <div class="rankmet-footer-credit">
-                    Developed By <a href="{{ $company->dev_link }}" target="_blank" style="color: #FF6600; text-decoration: none;">{{ $company->dev_name }}</a>
-                </div>
-            @else
-                <img src="{{ asset('payments.png') }}" alt="Payment methods" class="rankmet-footer-checkout-img" style="height: 44px; width: auto;">
-            @endif
+            <img src="{{ asset('payments.png') }}" alt="Payment methods" class="rankmet-footer-checkout-img" style="height: 44px; width: auto;">
         </div>
     </div>
 </footer>

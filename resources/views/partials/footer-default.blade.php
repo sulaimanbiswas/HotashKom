@@ -84,13 +84,13 @@
                 <div class="site-footer__copyright">
                     &copy; {{ $company->name ?? '' }}
                 </div>
-                @if(($name = $company->dev_name??'Hotash Tech') != '#' and ($link =
-                $company->dev_link??'https://hotash.tech') != '#')
+                {{-- @if(($name = $company->dev_name??'AB Infotech Ltd') != '#' and ($link =
+                $company->dev_link??'https://abinfotech.com.bd') != '#')
                 <div class="site-footer__payments">
-                    Developed By <a href="{{$company->dev_link??'https://hotash.tech'}}"
-                        class="text-danger">{{$company->dev_name??'Hotash Tech'}}</a>
+                    Developed By <a href="{{$company->dev_link??'https://abinfotech.com.bd'}}"
+                        class="text-danger">{{$company->dev_name??'AB Infotech Ltd'}}</a>
                 </div>
-                @else
+                @else --}}
                 <div class="site-footer__payments">
                     <img src="{{ asset('payments.png') }}" style="height: 55px;" />
                 </div>
